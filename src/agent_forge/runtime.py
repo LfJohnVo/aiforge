@@ -22,6 +22,11 @@ from typing import Any
 import yaml
 
 from agent_forge.api.auth import Authenticator, AuthSettings
+from agent_forge.connectors import ConnectorRegistry, build_registry, context_from_state
+from agent_forge.connectors.databases import build_database_connectors
+from agent_forge.connectors.mcp_client import McpGatewayConnector
+from agent_forge.connectors.n8n import N8nConnector, WorkflowSpec
+from agent_forge.connectors.repo_graph import RepoGraphConnector
 from agent_forge.core.checkpointer import CheckpointerKind, open_checkpointer
 from agent_forge.core.errors import CapabilityUnavailableError, ProfileError
 from agent_forge.core.graph import GraphDeps, build_graph
@@ -116,6 +121,7 @@ class Runtime:
     authenticator: Authenticator
     memory: MemoryManager
     knowledge: KnowledgeService
+    connectors: ConnectorRegistry
     approvals: ApprovalStore
     approval_policy: ApprovalPolicy
     capabilities: dict[str, bool] = field(default_factory=dict)
@@ -132,6 +138,7 @@ class Runtime:
         await self.gateway.aclose()
         await self.memory.store.aclose()
         await self.knowledge.aclose()
+        await self.connectors.aclose()
 
 
 def check_capabilities(profile: AgentProfile, *, strict: bool) -> dict[str, bool]:
@@ -222,6 +229,28 @@ async def build_runtime(
 
     knowledge = build_knowledge(profile=profile, gateway=gateway, env=dict(source))
 
+    connectors = build_registry(
+        profile=profile,
+        connectors=[
+            McpGatewayConnector.from_env(dict(source)),
+            N8nConnector(
+                source.get("N8N_URL", ""),
+                api_key=source.get("N8N_API_KEY", ""),
+                workflows=[
+                    WorkflowSpec(name=name, description=f"Workflow n8n {name}")
+                    for name in profile.connectors.n8n.workflows
+                ],
+                callback_url=(
+                    f"{source.get('AGENT_PUBLIC_URL', '')}/channels/n8n/callback"
+                    if source.get("AGENT_PUBLIC_URL")
+                    else ""
+                ),
+            ),
+            RepoGraphConnector(),
+            *build_database_connectors(profile.connectors.databases, env=dict(source)),
+        ],
+    )
+
     deps = GraphDeps(
         subgraph=subgraph,
         prompts=prompts,
@@ -236,6 +265,7 @@ async def build_runtime(
         max_retries=profile.events.judge.max_retries,
         memory=memory,
         knowledge=knowledge,
+        tool_executor=connectors.executor(context_from_state),
     )
 
     checkpointer = await stack.enter_async_context(
@@ -258,6 +288,7 @@ async def build_runtime(
         authenticator=Authenticator(AuthSettings.from_env(source)),
         memory=memory,
         knowledge=knowledge,
+        connectors=connectors,
         approvals=InMemoryApprovalStore(),
         approval_policy=ApprovalPolicy(
             approvers_group=profile.governance.hitl_approvers_group,
@@ -276,5 +307,6 @@ async def build_runtime(
         capabilities=sorted(k for k, v in capabilities.items() if v),
         memory_scope=profile.memory.ltm.scope,
         knowledge=profile.knowledge.rag.enabled,
+        connectors=connectors.names(),
     )
     return runtime

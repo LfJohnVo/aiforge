@@ -9,7 +9,7 @@ Reglas permanentes:
 - Un commit por unidad lógica; actualiza docs/memory/DECISIONS_LOG.md al cerrar cada fase.
 - Ante ambigüedad: decide, registra un ADR y continúa. No esperes confirmación.
 - En la Fase 0 expande este archivo según ordena el prompt, pero NUNCA borres este bloque de misión.
-- Estado actual: Fase 4 — Conectores (F0–F3 cerradas)
+- Estado actual: Fase 5 — Upstream y canales (F0–F4 cerradas)
 
 ---
 
@@ -91,7 +91,8 @@ Estas son las que rompen el producto si se violan. Cada una tiene un test que la
    Sin identidad, el techo es C0.
 5. **El core no conoce dominios.** Ningún término de negocio en `core/`, `governance/`,
    `gateway/` o `api/`. Todo dominio vive en subgrafos y perfil.
-6. **El LLM no escribe SQL ni comandos.** Sólo elige plantilla allowlisted y argumentos.
+6. **El LLM no escribe SQL ni comandos.** Sólo elige plantilla allowlisted y
+   argumentos; no existe ruta de código que acepte una consulta de quien llama.
 7. **`tenant_id` es parte de la clave** en Redis, Postgres, Qdrant, Neo4j, NATS y ledger.
 8. **Los prompts no se auto-despliegan.** Cambio de prompt = PR + evals.
 9. **El ledger es append-only** con hash-chain; se verifica antes de exportar.
@@ -140,8 +141,8 @@ Dos restricciones que vienen de resolver el lockfile, no de preferencia:
 | F1 | Núcleo agéntico + canal OpenAI-compatible | **cerrada** |
 | F2 | Memoria STM/LTM/episódica, caché semántica, olvido | **cerrada** |
 | F3 | Conocimiento: ingesta, RAG/CAG/GraphRAG, ACL | **cerrada** |
-| F4 | Conectores: registry, MCP client, n8n, OpenConnector, BDs | **en curso** |
-| F5 | Upstream MCP/A2A/OpenAPI + canales restantes | pendiente |
+| F4 | Conectores: registry, MCP client, n8n, OpenConnector, BDs | **cerrada** |
+| F5 | Upstream MCP/A2A/OpenAPI + canales restantes | **en curso** |
 | F6 | Gobernanza, Agregador/Judge, evidencia | pendiente |
 | F7 | Observabilidad y evals con gates | pendiente |
 | F8 | Endurecimiento, empaque, Helm, Well-Architected | pendiente |

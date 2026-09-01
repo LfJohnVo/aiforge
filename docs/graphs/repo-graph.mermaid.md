@@ -1,11 +1,16 @@
 ```mermaid
 flowchart LR
-  scripts["scripts<br/>835 loc"]
-  src_agent_forge["src/agent_forge<br/>288 loc"]
-  src_agent_forge_api["src/agent_forge/api<br/>799 loc"]
-  src_agent_forge_channels["src/agent_forge/channels<br/>2 loc"]
+  scripts["scripts<br/>1147 loc"]
+  src_agent_forge["src/agent_forge<br/>320 loc"]
+  src_agent_forge_api["src/agent_forge/api<br/>804 loc"]
+  src_agent_forge_channels["src/agent_forge/channels<br/>101 loc"]
   src_agent_forge_channels_openai_api["src/agent_forge/channels/openai_api<br/>317 loc"]
-  src_agent_forge_core["src/agent_forge/core<br/>2164 loc"]
+  src_agent_forge_connectors["src/agent_forge/connectors<br/>935 loc"]
+  src_agent_forge_connectors_databases["src/agent_forge/connectors/databases<br/>529 loc"]
+  src_agent_forge_connectors_mcp_client["src/agent_forge/connectors/mcp_client<br/>318 loc"]
+  src_agent_forge_connectors_n8n["src/agent_forge/connectors/n8n<br/>272 loc"]
+  src_agent_forge_connectors_openconnector["src/agent_forge/connectors/openconnector<br/>288 loc"]
+  src_agent_forge_core["src/agent_forge/core<br/>2202 loc"]
   src_agent_forge_core_subgraphs["src/agent_forge/core/subgraphs<br/>216 loc"]
   src_agent_forge_core_subgraphs_generalist["src/agent_forge/core/subgraphs/generalist<br/>58 loc"]
   src_agent_forge_core_subgraphs_it_support["src/agent_forge/core/subgraphs/it_support<br/>159 loc"]
@@ -21,17 +26,21 @@ flowchart LR
   src_agent_forge_profile["src/agent_forge/profile<br/>570 loc"]
   tests["tests<br/>255 loc"]
   tests_integration["tests/integration<br/>529 loc"]
-  tests_unit["tests/unit<br/>4230 loc"]
-  tests_unit -->|31| src_agent_forge_core
+  tests_unit["tests/unit<br/>4558 loc"]
+  tests_unit_connectors["tests/unit/connectors<br/>1417 loc"]
+  tests_unit -->|35| src_agent_forge_core
+  tests_unit_connectors -->|11| src_agent_forge_core
+  src_agent_forge_connectors -->|9| src_agent_forge_core
   src_agent_forge_memory -->|9| src_agent_forge_core
+  tests_unit -->|9| tests
   src_agent_forge_api -->|8| src_agent_forge_core
   src_agent_forge_knowledge -->|8| src_agent_forge_core
-  tests_unit -->|8| tests
   src_agent_forge_memory -->|7| src_agent_forge_observability
   src_agent_forge -->|7| src_agent_forge_core
   tests_integration -->|7| src_agent_forge_core
   tests -->|7| src_agent_forge_core
   src_agent_forge_knowledge_rag -->|6| src_agent_forge_core
+  tests_unit_connectors -->|6| src_agent_forge_connectors
   src_agent_forge_core -->|5| src_agent_forge_observability
   src_agent_forge_core_subgraphs -->|5| src_agent_forge_core
   tests_unit -->|5| src_agent_forge_knowledge_rag
@@ -43,12 +52,19 @@ flowchart LR
   tests_unit -->|4| src_agent_forge_memory
   tests_unit -->|4| src_agent_forge_gateway
   src_agent_forge_channels_openai_api -->|3| src_agent_forge_core
+  src_agent_forge_connectors -->|3| src_agent_forge_observability
+  src_agent_forge_connectors_databases -->|3| src_agent_forge_core
+  src_agent_forge_connectors_mcp_client -->|3| src_agent_forge_core
+  src_agent_forge_connectors_n8n -->|3| src_agent_forge_core
+  src_agent_forge_connectors_openconnector -->|3| src_agent_forge_core
   src_agent_forge_core -->|3| src_agent_forge_gateway
   src_agent_forge_knowledge -->|3| src_agent_forge_observability
   src_agent_forge_knowledge_rag -->|3| src_agent_forge_observability
   src_agent_forge_profile -->|3| src_agent_forge_core
   tests_unit -->|3| src_agent_forge_api
   tests_unit -->|3| src_agent_forge_core_subgraphs_it_support
+  tests_unit -->|3| src_agent_forge_connectors
+  tests_unit -->|3| src_agent_forge_core_subgraphs
   scripts -->|2| src_agent_forge_observability
   src_agent_forge_api -->|2| src_agent_forge_channels_openai_api
   src_agent_forge_core -->|2| src_agent_forge_core_subgraphs
@@ -58,9 +74,9 @@ flowchart LR
   src_agent_forge_knowledge_ingestion -->|2| src_agent_forge_knowledge_rag
   src_agent_forge_knowledge_sources -->|2| src_agent_forge_core
   src_agent_forge_memory -->|2| src_agent_forge_gateway
+  src_agent_forge -->|2| src_agent_forge_connectors
   src_agent_forge -->|2| src_agent_forge_gateway
   tests -->|2| src_agent_forge_gateway
-  tests_unit -->|2| src_agent_forge_core_subgraphs
   tests_unit -->|2| src_agent_forge_knowledge_graphrag
   tests_unit -->|2| src_agent_forge_knowledge_sources
   scripts -->|1| src_agent_forge_core
@@ -69,8 +85,23 @@ flowchart LR
   src_agent_forge_api -->|1| src_agent_forge_knowledge
   src_agent_forge_api -->|1| src_agent_forge_channels
   src_agent_forge_api -->|1| src_agent_forge_profile
+  src_agent_forge_channels -->|1| src_agent_forge_channels_openai_api
+  src_agent_forge_channels -->|1| src_agent_forge_connectors_n8n
+  src_agent_forge_channels -->|1| src_agent_forge_core
+  src_agent_forge_channels -->|1| src_agent_forge_observability
+  src_agent_forge_channels -->|1| src_agent_forge
   src_agent_forge_channels_openai_api -->|1| src_agent_forge_observability
   src_agent_forge_channels_openai_api -->|1| src_agent_forge
+  src_agent_forge_connectors_databases -->|1| src_agent_forge_connectors
+  src_agent_forge_connectors_databases -->|1| src_agent_forge_observability
+  src_agent_forge_connectors_mcp_client -->|1| src_agent_forge_connectors
+  src_agent_forge_connectors_mcp_client -->|1| src_agent_forge_observability
+  src_agent_forge_connectors_n8n -->|1| src_agent_forge_connectors
+  src_agent_forge_connectors_n8n -->|1| src_agent_forge_observability
+  src_agent_forge_connectors_openconnector -->|1| src_agent_forge_connectors
+  src_agent_forge_connectors_openconnector -->|1| src_agent_forge_observability
+  src_agent_forge_connectors -->|1| src_agent_forge_core_subgraphs
+  src_agent_forge_core -->|1| src_agent_forge_connectors
   src_agent_forge_core -->|1| src_agent_forge_knowledge
   src_agent_forge_core -->|1| src_agent_forge_memory
   src_agent_forge_core_subgraphs_generalist -->|1| src_agent_forge_core_subgraphs
@@ -98,6 +129,9 @@ flowchart LR
   src_agent_forge_knowledge_sources -->|1| src_agent_forge_knowledge
   src_agent_forge_knowledge_sources -->|1| src_agent_forge_observability
   src_agent_forge -->|1| src_agent_forge_api
+  src_agent_forge -->|1| src_agent_forge_connectors_databases
+  src_agent_forge -->|1| src_agent_forge_connectors_mcp_client
+  src_agent_forge -->|1| src_agent_forge_connectors_n8n
   src_agent_forge -->|1| src_agent_forge_core_subgraphs
   src_agent_forge -->|1| src_agent_forge_knowledge
   src_agent_forge -->|1| src_agent_forge_memory
@@ -111,6 +145,12 @@ flowchart LR
   tests_integration -->|1| src_agent_forge_memory
   tests -->|1| src_agent_forge_core_subgraphs
   tests -->|1| src_agent_forge_core_subgraphs_generalist
+  tests_unit_connectors -->|1| src_agent_forge_connectors_databases
+  tests_unit_connectors -->|1| src_agent_forge_connectors_openconnector
+  tests_unit_connectors -->|1| src_agent_forge_connectors_mcp_client
+  tests_unit_connectors -->|1| src_agent_forge_connectors_n8n
+  tests_unit_connectors -->|1| tests
   tests_unit -->|1| src_agent_forge
+  tests_unit -->|1| src_agent_forge_connectors_n8n
   tests_unit -->|1| src_agent_forge_profile
 ```

@@ -20,6 +20,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from agent_forge.api.app import create_app
 from agent_forge.api.auth import Authenticator, AuthSettings, parse_api_keys
+from agent_forge.connectors import Allowlist, ConnectorRegistry
 from agent_forge.core.autonomy import AutonomyLevel, AutonomyMap
 from agent_forge.core.classification import Classification
 from agent_forge.core.errors import AuthenticationError
@@ -105,6 +106,7 @@ def _runtime(
     gateway = make_gateway(transport)
     memory = build_memory(store=InMemoryStore(), cache_similarity=0.9)
     knowledge = _empty_knowledge()
+    registry = ConnectorRegistry(allowlist=Allowlist(builtin=frozenset({"repo_graph.query"})))
     deps = make_deps(
         gateway=gateway,
         subgraph=subgraph,
@@ -125,6 +127,7 @@ def _runtime(
         authenticator=Authenticator(AuthSettings.from_env(env)),
         memory=memory,
         knowledge=knowledge,
+        connectors=registry,
         approvals=InMemoryApprovalStore(),
         approval_policy=ApprovalPolicy(approvers_group="finanzas-lideres"),
         capabilities={"knowledge": False, "memory": False},

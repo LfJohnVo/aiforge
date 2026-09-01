@@ -30,6 +30,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
+from agent_forge.connectors import ConnectorRegistry, context_from_state
 from agent_forge.core.autonomy import AutonomyLevel, AutonomyMap
 from agent_forge.core.classification import Classification, accumulate
 from agent_forge.core.errors import AgentForgeError
@@ -135,6 +136,9 @@ class GraphDeps:
     memory: MemoryManager | None = None
     # Set by the runtime in F3. None means the cell answers without a corpus.
     knowledge: KnowledgeService | None = None
+    # Set by the runtime in F4. The catalogue is per-request, because what a tool
+    # may return depends on who is asking.
+    connectors: ConnectorRegistry | None = None
     model_fast: str = "local/fast"
     model_quality: str = "local/quality"
     language: str = "es"
@@ -255,22 +259,35 @@ async def _governance_gate(state: AgentState, deps: GraphDeps) -> dict[str, Any]
     return update
 
 
+async def _tool_catalogue(state: AgentState, deps: GraphDeps) -> Sequence[ToolDescriptor]:
+    """Tools this requester may be offered, this turn.
+
+    Per-request rather than per-cell: the catalogue depends on the requester's ceiling
+    and on which connectors are healthy right now, and offering a tool that will be
+    refused wastes a model call and teaches the model a bad habit.
+    """
+    if deps.connectors is None:
+        return deps.tool_catalog
+    return await deps.connectors.descriptors(context_from_state(state))
+
+
 async def _planner(state: AgentState, deps: GraphDeps) -> dict[str, Any]:
     """Decompose the request. Re-entry point for a ``replan`` verdict."""
     feedback = str(state.scratchpad.get("judge_feedback", ""))
+    catalogue = await _tool_catalogue(state, deps)
     plan = await deps.planner.plan(
         PlanRequest(
             request=state.last_user_message,
             area=state.area,
             intents=deps.router.intents,
-            tools=deps.tool_catalog,
+            tools=catalogue,
             classification=state.classification,
             tenant_id=state.identity.tenant_id,
             trace_id=state.trace_id,
             feedback=feedback,
         )
     )
-    ctx = _domain_context(state, deps)
+    ctx = _domain_context(state, deps, tools=catalogue)
     plan = await deps.subgraph.refine_plan(ctx, plan)
     log.info("graph.planned", steps=len(plan), replanned=bool(feedback))
     return {"plan": plan}
@@ -278,7 +295,7 @@ async def _planner(state: AgentState, deps: GraphDeps) -> dict[str, Any]:
 
 async def _domain(state: AgentState, deps: GraphDeps) -> dict[str, Any]:
     """Run the domain subgraph and fold what it found into the classification."""
-    ctx = _domain_context(state, deps)
+    ctx = _domain_context(state, deps, tools=await _tool_catalogue(state, deps))
     outcome: DomainOutcome = await deps.subgraph.gather(ctx)
 
     classification = accumulate(state.classification, outcome.classification())
@@ -314,12 +331,31 @@ async def _tools(state: AgentState, deps: GraphDeps) -> dict[str, Any]:
     invocations: list[ToolInvocation] = []
     approvals = list(state.approvals)
     classification = state.classification
+    catalogue = await _tool_catalogue(state, deps)
 
     for request in requests:
-        descriptor = next((t for t in deps.tool_catalog if t.name == request.tool), None)
+        descriptor = next((t for t in catalogue if t.name == request.tool), None)
+        if descriptor is None:
+            # Not in this requester's catalogue: unknown, not allowlisted, or its
+            # connector is down. Refuse outright rather than pausing for approval --
+            # asking a human to authorise a tool that does not exist wastes their time,
+            # and the action would fail afterwards anyway.
+            log.info("graph.tool_unavailable", tool=request.tool)
+            invocations.append(
+                ToolInvocation(
+                    connector=_connector_of(request.tool),
+                    tool=request.tool,
+                    args_digest=_digest(request.args),
+                    ok=False,
+                    error="tool is not available to this requester",
+                    autonomy_required=AutonomyLevel.A4,
+                    finished_at=datetime.now(UTC),
+                )
+            )
+            continue
+
         required = deps.autonomy_map.effective(
-            request.action_category,
-            declared=descriptor.autonomy_min if descriptor else AutonomyLevel.A4,
+            request.action_category, declared=descriptor.autonomy_min
         )
         # A2+ always needs a human (governance rule). Below that, an action still needs
         # one when it outranks what this requester was granted -- which is what stops an
@@ -528,7 +564,9 @@ def _after_quality(state: AgentState) -> str:
 # --------------------------------------------------------------------- helpers
 
 
-def _domain_context(state: AgentState, deps: GraphDeps) -> DomainContext:
+def _domain_context(
+    state: AgentState, deps: GraphDeps, *, tools: Sequence[ToolDescriptor] | None = None
+) -> DomainContext:
     """Build the facade the subgraph sees.
 
     The retrieval closure is bound to *this* request's identity, so a domain plugin
@@ -541,7 +579,7 @@ def _domain_context(state: AgentState, deps: GraphDeps) -> DomainContext:
     return DomainContext(
         state=state,
         prompts=deps.prompts,
-        tools=deps.tool_catalog,
+        tools=deps.tool_catalog if tools is None else tools,
         retrieve=retrieve,
         profile_extras={"language": deps.language, "persona": deps.persona},
     )

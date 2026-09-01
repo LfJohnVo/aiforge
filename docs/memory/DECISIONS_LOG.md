@@ -255,3 +255,66 @@ en la traducción al almacén real.
 
 **Siguiente:** F4 · conectores.
 
+---
+
+## 2026-09-01 · F4 · Conectores
+
+### D-024 · Los defaults del contrato van a la dirección segura
+**Razón:** el registry puede comprobar la allowlist y la salud, pero no puede comprobar
+*honestidad*. Un conector que declara `autonomy_min=A0` para una acción destructiva pasa
+todos los controles. Los defaults compensan: `A2` (quien no piensa en autonomía obtiene un
+humano), `C4` (quien no clasifica su salida no la publica) y un `health()` que debe
+sondear.
+
+### D-025 · La allowlist vacía no permite nada
+**Alternativas:** interpretar "sin allowlist" como "todo permitido", que es lo cómodo.
+**Razón:** un perfil que olvida declarar sus tools debe producir un agente que no puede
+actuar, no uno que puede actuar sobre todo.
+
+### D-026 · El catálogo de tools es por petición
+**Razón:** depende del techo de clasificación del solicitante y de qué conectores están
+sanos en ese instante. Un catálogo por célula ofrecería al modelo herramientas que van a
+ser rechazadas, lo que gasta una llamada y le enseña un mal hábito.
+
+### D-027 · Una tool no disponible se rechaza, no se pausa para aprobación
+**Contexto:** si el descriptor no estaba en el catálogo, el nivel requerido salía A4 y el
+grafo llamaba a `interrupt()`.
+**Por qué está mal:** pedirle a una persona que autorice una herramienta inexistente le
+hace perder el tiempo, y si la aprueba la acción falla igual.
+**Decisión:** rechazo inmediato, registrado, y el modelo se entera —necesita saber que la
+acción no ocurrió, o la dará por hecha.
+
+### D-028 · El MCP client comprueba los dos nombres de `is_error`
+**Contexto:** MCP 2.x renombró `isError` a `is_error` (y `inputSchema` a `input_schema`).
+Con el nombre viejo, **un fallo remoto se leía como éxito**.
+**Decisión:** comprobar ambos, porque un gateway puede estar corriendo cualquiera de las
+dos generaciones del SDK y tratar un fallo como éxito es el peor modo de fallo posible
+para un agente.
+
+### D-029 · La identidad del usuario viaja en una clave propia hacia MCP
+**Razón:** enviada dentro de los argumentos de la tool, un servidor remoto podría declarar
+un parámetro `user_id` y recibir —y devolver— algo suplantable. Va bajo `_agentforge`,
+separada de lo que la tool declara.
+
+### D-030 · El test de MCP usa un servidor real, no un doble
+**Razón:** los tres bugs de esta fase vivían en la traducción al protocolo real. Un
+`ClientSession` mockeado los habría aprobado todos. El servidor de prueba se lanza como
+subproceso y habla el protocolo de verdad.
+
+### Cierre de F4
+
+**Construido:** contrato `BaseConnector` con defaults seguros, registry con allowlist y
+doble comprobación, cliente MCP multi-transporte, n8n con callbacks, OpenConnector,
+cuatro drivers de BD con plantillas allowlisted, `repo_graph.query`, la ruta de callback
+y el generador `make new-connector`.
+
+**Verificado:** una tool servida por un servidor MCP real se ejecuta e2e; un workflow n8n
+disparado desde el grafo lo deja esperando y su callback lo reanuda hasta la respuesta.
+Cobertura `connectors` 83.6 %.
+
+**Cuatro bugs reales**, tres de ellos invisibles para un test con dobles. Uno —el fallo
+remoto leído como éxito— habría hecho que el agente afirmara haber ejecutado acciones que
+fallaron.
+
+**Siguiente:** F5 · upstream y canales.
+

@@ -6,6 +6,11 @@ Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado
 ## [Unreleased]
 
 ### Added
+- **F4 · Conectores**: `BaseConnector` con defaults seguros (A2, C4, health real),
+  registry con allowlist por tenant y doble comprobación, cliente MCP multi-transporte,
+  n8n con callbacks que reanudan el grafo, OpenConnector dirigido por spec OpenAPI,
+  cuatro drivers de BD con plantillas allowlisted, `repo_graph.query`,
+  `POST /channels/n8n/callback` y `make new-connector`.
 - **F3 · Conocimiento**: ingesta incremental desde carpeta, SharePoint (delta queries) y
   S3; pipeline parseo → chunking semántico → clasificación C0–C4 → embeddings → Qdrant;
   GraphRAG sobre Neo4j; CAG con presupuesto; retrieval híbrido BM25 + vectorial + grafo

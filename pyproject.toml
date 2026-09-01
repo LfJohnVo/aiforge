@@ -121,14 +121,16 @@ dev = [
 agent-forge = "agent_forge.cli:app"
 
 # Plugin architecture: adding a connector / subgraph / channel never touches the core.
+# Each target is a zero-argument factory: the registry builds the connector from the
+# environment, so a cell without the corresponding configuration simply reports the
+# connector unhealthy instead of failing to start.
 [project.entry-points."agent_forge.connectors"]
-n8n = "agent_forge.connectors.n8n:N8nConnector"
-openconnector = "agent_forge.connectors.openconnector:OpenConnectorDriver"
-mcp_gateway = "agent_forge.connectors.mcp_client:McpGatewayConnector"
-postgres = "agent_forge.connectors.databases.postgres:PostgresConnector"
-mysql = "agent_forge.connectors.databases.mysql:MySQLConnector"
-mongodb = "agent_forge.connectors.databases.mongodb:MongoDBConnector"
-redis = "agent_forge.connectors.databases.redis_conn:RedisConnector"
+mcp_gateway = "agent_forge.connectors.mcp_client:McpGatewayConnector.from_env"
+n8n = "agent_forge.connectors.n8n:N8nConnector.from_env"
+postgres = "agent_forge.connectors.databases:postgres_connector"
+mysql = "agent_forge.connectors.databases:mysql_connector"
+mongodb = "agent_forge.connectors.databases:mongodb_connector"
+redis = "agent_forge.connectors.databases:redis_connector"
 repo_graph = "agent_forge.connectors.repo_graph:RepoGraphConnector"
 
 [project.entry-points."agent_forge.subgraphs"]
@@ -186,6 +188,7 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = [
+  "asyncpg.*", "psycopg.*", "redis.*",
   "litellm.*", "nats.*", "cloudevents.*", "qdrant_client.*", "neo4j.*",
   "docling.*", "lightrag.*", "mem0.*", "graphiti_core.*", "presidio_analyzer.*",
   "presidio_anonymizer.*", "llm_guard.*", "rank_bm25.*", "croniter.*",

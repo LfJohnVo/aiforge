@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 
 from agent_forge import __version__
 from agent_forge.api import admin, health
-from agent_forge.channels import openai_api
+from agent_forge.channels import n8n_callback, openai_api
 from agent_forge.core.errors import AgentForgeError, ProfileError
 from agent_forge.observability.logging import clear_request_context, get_logger
 from agent_forge.profile import format_profile_error
@@ -73,6 +73,11 @@ def _mount_channels(app: FastAPI, runtime: Runtime) -> None:
         # OpenWebUI speaks the OpenAI protocol; one router serves both.
         app.include_router(openai_api.router)
         mounted.append("openai_api")
+    if "n8n" in runtime.connectors.names():
+        # Mounted only when an n8n connector exists: an inbound route with nothing behind
+        # it is attack surface for no benefit.
+        app.include_router(n8n_callback.router)
+        mounted.append("n8n_callback")
     log.info("api.channels_mounted", channels=mounted)
 
 
