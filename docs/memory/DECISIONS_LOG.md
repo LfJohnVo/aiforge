@@ -497,3 +497,88 @@ deduplicacion que anulaba los reintentos y perdia el evento para siempre.
 la suite de integracion.
 
 **Siguiente:** F7 · observabilidad y evals.
+
+## 2026-09-01 · F7 · Observabilidad y evals
+
+### D-052 · Los atributos de span son una allowlist, no una lista de prohibidos
+**Razon:** las trazas salen del perimetro por diseño y un atributo de span es el camino mas
+corto entre un documento clasificado y un colector que nadie clasifico. Con una lista de
+prohibidos, un atributo nuevo entra por defecto; con una allowlist empieza rechazado hasta
+que alguien lo revisa. El guardia esta en `span()` y no en cada punto de llamada porque hay
+decenas y basta un `answer=...` distraido.
+
+### D-053 · El SDK de OTel no puede registrar la excepcion
+**Contexto:** `start_as_current_json` —`start_as_current_span`— trae `record_exception` y
+`set_status_on_exception` en True, y ambos escriben el **mensaje** de la excepcion. Un
+mensaje cita de rutina lo que lo provoco.
+**Decision:** desactivar los dos y registrar solo el tipo. Lo encontro el test que afirma
+que ningun span cita la entrada; el codigo ya intentaba hacerlo bien y el SDK lo
+sobrescribia por detras.
+
+### D-054 · Langfuse recibe texto solo hasta C1
+**Razon:** es un producto alojado por defecto y su valor esta en enseñar prompts y
+respuestas. De C2 en adelante recibe digests, contadores y scores. El filtro vive en
+`langfuse_client.py`, no en cada punto de llamada, y una clasificacion ilegible cuenta como
+C4: la duda se resuelve sin enviar nada. Un Langfuse autoalojado puede subir el limite con
+`max_content_class`, y esa decision es de quien opera.
+
+### D-055 · Cada nodo se instrumenta una vez, al registrarlo
+**Razon:** envolver el nodo en `build_graph` significa que un nodo añadido mañana queda
+trazado y medido por haberlo registrado, no por haberse acordado. Ocho funciones
+instrumentadas a mano son ocho oportunidades de olvidar la novena.
+
+### D-056 · Ninguna etiqueta de metrica la controla quien llama
+**Razon:** una etiqueta de cardinalidad libre es una bomba de relojeria: la primera vez que
+alguien pega un UUID en una, Prometheus empieza a comerse el host. Todas salen de
+configuracion o de un catalogo fijo, y hay un test que recorre el registro y lo comprueba.
+
+### D-057 · El gate lo llevan scorers propios; Ragas refina
+**Contexto:** `ragas==0.4.3` no importaba (ver D-058) y su factory por defecto va a OpenAI.
+**Decision:** scorers deterministas propios como gate —corren sin red, sin modelo y sin
+extra— y Ragas como refinamiento opcional apuntado al proxy LiteLLM de la propia celula.
+Las metricas de seguridad no se delegan nunca: la opinion de un evaluador externo sobre si
+hubo fuga no es evidencia de lo que la celula hizo. Registrado como
+[ADR-009](../adr/ADR-009-eval-scorers-and-the-ragas-pin.md).
+
+### D-058 · `langchain-community` fijado a 0.3.31 en la extra `evals`
+**Contexto:** Ragas importa `langchain_community.chat_models.vertexai`, que 0.4.x elimino,
+y no declara cota superior. La extra entera fallaba con `ModuleNotFoundError`, en silencio,
+porque nadie la importa hasta que corre el gate.
+**Decision:** fijarla, con el motivo escrito junto al pin. Es una dependencia de una
+dependencia y es incomodo; la alternativa es una extra que no importa.
+
+### D-059 · El pase de control de acceso se juzga contra la politica, no contra la respuesta
+**Razon:** una respuesta podria omitir un fragmento prohibido por casualidad. Lo que tiene
+que ser cierto es que el PDP lo niegue, para ese solicitante, siempre. Un caso que nombra
+un fragmento ausente del corpus cuenta como violacion: un caso roto no puede leerse como
+aprobado.
+
+### D-060 · Un umbral sin metrica detras es un incumplimiento
+**Razon:** un gate que mide nada en silencio es peor que no tener gate. Si `thresholds.yaml`
+declara una metrica que el harness no produce, la corrida falla y lo dice.
+
+### D-061 · `QualityVerdict` vive en `core/state.py`
+**Razon:** el juez que lo produce no tiene por que importar el grafo que lo consume. Esa
+arista cerraba un ciclo `core.graph → observability → events → governance → core.graph` en
+cuanto se instrumento el grafo. Las otras dos aristas malas —`langfuse_client` importando
+`events.evidence` y `judge` importando `governance.dlp`— eran del mismo tipo: capas bajas
+importando capas altas.
+
+### Cierre de F7
+
+**Construido:** trazas OTel con allowlist de atributos, quince metricas Prometheus con
+`/metrics`, Langfuse con filtro por clasificacion, instrumentacion de nodos, gateway y tool
+calls, cinco dashboards de Grafana provisionados, harness de evals con scorers propios y
+Ragas opcional, datasets semilla, umbrales con gate, generador de datasets sinteticos y
+config de Promptfoo.
+
+**Verificado:** una traza completa request→respuesta, asertada como arbol de spans; y el
+gate fallando cuando se endurece el umbral de groundedness, tanto en un test como en un
+paso de CI que espera salida distinta de cero.
+
+**Dos fugas y una dependencia rota**: el SDK de OTel escribiendo mensajes de excepcion en
+los spans, Ragas que habria evaluado contra OpenAI, y la extra `evals` que no importaba.
+
+630 tests unit + policy; cobertura global 82.7 %.
+
+**Siguiente:** F8 · endurecimiento y empaque.

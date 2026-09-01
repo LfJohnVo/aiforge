@@ -132,6 +132,7 @@ def make_runtime(
     from agent_forge.events import Aggregator, InMemoryBus, build_ledger
     from agent_forge.governance import build_governance
     from agent_forge.memory import InMemoryStore, build_memory
+    from agent_forge.observability import Observability, build_langfuse, get_metrics
     from agent_forge.profile import load_profile
     from agent_forge.runtime import ChannelSettings, Runtime, Settings
     from agent_forge.upstream.tasks import TaskRunner
@@ -189,6 +190,7 @@ def make_runtime(
         tasks=TaskRunner(
             invoke, agent_name=profile.identity.agent_name, area=profile.identity.area
         ),
+        observability=Observability(metrics=get_metrics(), langfuse=build_langfuse(enabled=False)),
         governance=governance,
         bus=bus,
         ledger=ledger,

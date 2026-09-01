@@ -9,6 +9,8 @@ here and not in some request-scoped object that would be gone by then.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
@@ -19,6 +21,28 @@ from agent_forge.core.classification import Classification, accumulate
 
 TaskStatus = Literal["running", "awaiting_approval", "completed", "failed", "blocked"]
 Verdict = Literal["approve", "retry", "replan", "escalate"]
+
+
+@dataclass(frozen=True, slots=True)
+class QualityVerdict:
+    """What the judge concluded about an answer.
+
+    Lives here rather than in ``core/graph.py`` so the judge that produces it does not
+    have to import the graph that consumes it -- an edge that made ``events`` depend on
+    ``core.graph`` and closed a cycle through the observability package.
+
+    The verdict, not just the scores: the thresholds live with the judge, where the
+    profile configures them, so the quality gate does not need to know what "good enough"
+    means for this deployment. Its job is the retry budget and the routing.
+    """
+
+    verdict: Verdict = "approve"
+    scores: dict[str, float] = dc_field(default_factory=dict)
+    reasons: tuple[str, ...] = ()
+
+    @property
+    def accepted(self) -> bool:
+        return self.verdict == "approve"
 
 
 def _now() -> datetime:

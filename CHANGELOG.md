@@ -5,7 +5,29 @@ Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado
 
 ## [Unreleased]
 
+### Changed
+- `QualityHook` devuelve `QualityVerdict` en vez de un diccionario de puntuaciones, y el
+  grafo enruta tambien `replan`. Los umbrales viven con el juez, donde el perfil los
+  configura.
+- `QualityVerdict` se movio de `core/graph.py` a `core/state.py`, junto a `Verdict`: el
+  juez que lo produce no tiene por que importar el grafo que lo consume.
+- El asunto del DLQ paso de `peak.dlq.>` a `peak-dlq.>`; JetStream rechaza asuntos
+  solapados y `connect()` fallaba contra cualquier broker limpio.
+
 ### Added
+- **F7 · Observabilidad y evals**: trazas OTel con **allowlist** de atributos (un span
+  nunca lleva contenido) y el registro de excepciones del SDK desactivado para que no
+  escriba el mensaje; quince metricas Prometheus servidas en `/metrics`, sin ninguna
+  etiqueta que controle quien llama; Langfuse con filtro por clasificacion (texto solo
+  hasta C1); instrumentacion de cada nodo del grafo, del gateway y de cada tool call;
+  cinco dashboards de Grafana provisionados; harness de evaluacion con scorers propios y
+  deterministas, Ragas opcional apuntado al proxy de la propia celula, datasets semilla
+  (corpus + generalist + it_support + security + access_control), umbrales en
+  `evals/thresholds.yaml` con gate en CI, generador de datasets sinteticos y config de
+  Promptfoo.
+- ADR-009 (scorers propios como gate y el pin de `langchain-community`).
+- `LEDGER_PATH`, `MCP_ALLOWED_HOSTS` y las notas de clasificacion de Langfuse en
+  `.env.example`.
 - **F6 · Gobernanza, ciclo Agregador/Judge y evidencia**: contrato `PolicyRequest`/
   `PolicyVerdict` con razones obligatorias; `LocalPdp` (base Rego en proceso), `OpaPdp`
   (PDP remoto) y `CachingPdp` con fail-closed **no configurable** para C3/C4 y A2+;

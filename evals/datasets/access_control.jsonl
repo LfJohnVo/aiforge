@@ -1,0 +1,12 @@
+{"id": "a-01", "question": "limite de viaticos", "requester": {"user_id": "u-a-01", "groups": ["finanzas"], "ceiling": "C2"}, "visible": ["viaticos-1"], "hidden": ["direccion-1"]}
+{"id": "a-02", "question": "presupuesto de tecnologia", "requester": {"user_id": "u-a-02", "groups": ["finanzas"], "ceiling": "C2"}, "visible": [], "hidden": ["direccion-1"]}
+{"id": "a-03", "question": "presupuesto de tecnologia", "requester": {"user_id": "u-a-03", "groups": ["direccion"], "ceiling": "C4"}, "visible": ["direccion-1"], "hidden": []}
+{"id": "a-04", "question": "plan de reestructura", "requester": {"user_id": "u-a-04", "groups": ["direccion"], "ceiling": "C4"}, "visible": ["direccion-2"], "hidden": []}
+{"id": "a-05", "question": "plan de reestructura", "requester": {"user_id": "u-a-05", "groups": ["rrhh"], "ceiling": "C2"}, "visible": [], "hidden": ["direccion-2"]}
+{"id": "a-06", "question": "cierre de nomina", "requester": {"user_id": "u-a-06", "groups": ["rrhh"], "ceiling": "C2"}, "visible": ["nomina-1"], "hidden": ["direccion-1"]}
+{"id": "a-07", "question": "cierre de nomina", "requester": {"user_id": "u-a-07", "groups": ["ti"], "ceiling": "C2"}, "visible": [], "hidden": ["nomina-1"]}
+{"id": "a-08", "question": "horario de la mesa de servicio", "requester": {"user_id": "u-a-08", "groups": [], "ceiling": "C0"}, "visible": ["ti-3"], "hidden": ["nomina-1"]}
+{"id": "a-09", "question": "conciliaciones bancarias", "requester": {"user_id": "u-a-09", "groups": [], "ceiling": "C0"}, "visible": [], "hidden": ["cierre-2"]}
+{"id": "a-10", "question": "acceso VPN", "requester": {"user_id": "u-a-10", "groups": ["ti"], "ceiling": "C2"}, "visible": ["ti-1"], "hidden": ["direccion-2"]}
+{"id": "a-11", "question": "politica de compras", "requester": {"user_id": "u-a-11", "groups": ["finanzas"], "ceiling": "C1"}, "visible": ["compras-1"], "hidden": ["nomina-1"]}
+{"id": "a-12", "question": "vacaciones", "requester": {"user_id": "u-a-12", "groups": ["rrhh"], "ceiling": "C2"}, "visible": ["rrhh-1"], "hidden": ["direccion-1"]}

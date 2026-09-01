@@ -48,6 +48,7 @@ from agent_forge.gateway.model_policy import ModelPolicy
 from agent_forge.governance import GovernanceService, build_governance
 from agent_forge.knowledge import KnowledgeService, build_knowledge
 from agent_forge.memory import MemoryManager, Scrubber, build_memory
+from agent_forge.observability import Observability, setup_observability
 from agent_forge.observability.logging import configure_logging, get_logger
 from agent_forge.profile import AgentProfile, load_profile
 from agent_forge.upstream.tasks import TaskRunner
@@ -203,6 +204,7 @@ class Runtime:
     knowledge: KnowledgeService
     connectors: ConnectorRegistry
     tasks: TaskRunner
+    observability: Observability
     governance: GovernanceService
     bus: EventBus
     ledger: EvidenceLedger
@@ -227,6 +229,24 @@ class Runtime:
         await self.connectors.aclose()
         await self.governance.aclose()
         await self.bus.aclose()
+        await self.observability.aclose()
+
+
+def _observe_task(observability: Observability, state: Any, elapsed: float) -> None:
+    """Record one finished task: the histogram, and the LLM trace if Langfuse is on.
+
+    Wrapped so a failure here cannot fail the request. Observability that can break the
+    thing it observes is worse than no observability.
+    """
+    try:
+        observability.metrics.task_duration.labels(
+            tenant=state.identity.tenant_id,
+            area=state.area or "general",
+            status=state.status,
+        ).observe(elapsed)
+        observability.langfuse.trace_task(state)
+    except Exception as exc:  # never let telemetry break a task
+        log.warning("observability.record_failed", detail=f"{type(exc).__name__}: {exc}"[:200])
 
 
 def _resume_hook(graph: Any, tasks: TaskRunner, instance: str) -> Any:
@@ -334,6 +354,11 @@ async def build_runtime(
 
     profile = load_profile(settings.profile_path, env=dict(source))
     capabilities = check_capabilities(profile, strict=settings.is_production)
+
+    # Before anything else that might want to emit a span: a tracer installed halfway
+    # through startup leaves the first half of startup untraced, which is the half that
+    # fails.
+    observability = setup_observability(settings=settings, profile=profile, env=dict(source))
 
     prompts = PromptRegistry.from_directory(settings.prompts_dir)
     policy = load_model_policy(settings.litellm_config)
@@ -449,9 +474,12 @@ async def build_runtime(
 
     async def invoke(state: Any) -> Any:
         """Run one task through the graph, namespaced by tenant and instance."""
+        from time import perf_counter
+
         from agent_forge.core.checkpointer import namespaced_thread_id
         from agent_forge.core.state import AgentState
 
+        started = perf_counter()
         raw = await graph.ainvoke(
             state,
             {
@@ -462,10 +490,13 @@ async def build_runtime(
                 }
             },
         )
+        final = raw if isinstance(raw, AgentState) else None
+        if final is None:
+            payload = {k: v for k, v in raw.items() if not k.startswith("__")}
+            final = AgentState.model_validate(payload)
+        _observe_task(observability, final, perf_counter() - started)
         if isinstance(raw, AgentState):
             return raw
-        payload = {k: v for k, v in raw.items() if not k.startswith("__")}
-        final = AgentState.model_validate(payload)
         # An interrupt means the graph paused for a human; upstream must see that as
         # `input-required`, not as a task that quietly finished.
         if raw.get("__interrupt__"):
@@ -499,6 +530,7 @@ async def build_runtime(
         knowledge=knowledge,
         connectors=connectors,
         tasks=tasks,
+        observability=observability,
         governance=governance,
         bus=bus,
         ledger=ledger,

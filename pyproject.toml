@@ -99,6 +99,10 @@ evals = [
   "langfuse==4.15.1",
   "deepeval==4.2.0",
   "ragas==0.4.3",
+  # Ragas imports `langchain_community.chat_models.vertexai`, which 0.4.x removed, and
+  # declares no upper bound of its own. Without this pin `import ragas` raises
+  # ModuleNotFoundError and the whole extra is unusable. See ADR-009.
+  "langchain-community==0.3.31",
 ]
 # Optional time-series analytics (RF-14), disabled by default.
 analytics = [

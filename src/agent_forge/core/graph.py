@@ -24,7 +24,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
-from typing import Any
+from typing import Any, cast
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
@@ -43,8 +43,8 @@ from agent_forge.core.state import (
     Citation,
     Message,
     PolicyDecision,
+    QualityVerdict,
     ToolInvocation,
-    Verdict,
 )
 from agent_forge.core.subgraphs.base import (
     DomainContext,
@@ -57,6 +57,7 @@ from agent_forge.gateway.litellm_client import GovernedGateway
 from agent_forge.knowledge import KnowledgeService
 from agent_forge.memory import MemoryManager
 from agent_forge.observability.logging import get_logger
+from agent_forge.observability.tracing import span_for_state
 
 log = get_logger(__name__)
 
@@ -83,31 +84,13 @@ class GateOutcome:
     redacted_text: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class QualityVerdict:
-    """What the judge concluded about an answer.
-
-    The verdict, not just the scores: the thresholds live with the judge, where the
-    profile configures them, so the gate does not need to know what "good enough" means
-    for this deployment. Its job is the retry budget and the routing.
-    """
-
-    verdict: Verdict = "approve"
-    scores: dict[str, float] = field(default_factory=dict)
-    reasons: tuple[str, ...] = ()
-
-    @property
-    def accepted(self) -> bool:
-        return self.verdict == "approve"
-
-
 # Injected by the API layer. F1 ships the identity-derived default below; F6 replaces it
 # with the PDP client and the DLP engine without touching this file.
 GovernanceHook = Callable[[AgentState], Awaitable[GateOutcome]]
 # (tool, args, state) -> result payload. Provided by the connector registry in F4.
 ToolExecutor = Callable[[str, dict[str, Any], AgentState], Awaitable[dict[str, Any]]]
 # (state) -> verdict. Provided by the judge in F6.
-QualityHook = Callable[[AgentState], Awaitable["QualityVerdict"]]
+QualityHook = Callable[[AgentState], Awaitable[QualityVerdict]]
 
 
 async def identity_gate(state: AgentState) -> GateOutcome:
@@ -208,6 +191,12 @@ async def _governance_gate(state: AgentState, deps: GraphDeps) -> dict[str, Any]
         obligations=outcome.obligations,
         fail_closed=outcome.fail_closed,
     )
+
+    _metrics().policy_decisions.labels(
+        tenant=state.identity.tenant_id,
+        decision="gate",
+        effect="allow" if outcome.allow else "deny",
+    ).inc()
 
     if not outcome.allow:
         log.warning("graph.blocked", reasons=list(outcome.reasons))
@@ -519,6 +508,7 @@ async def _quality_gate(state: AgentState, deps: GraphDeps) -> dict[str, Any]:
         return {"verdict": "approve"}
 
     outcome = await deps.quality(state)
+    _metrics().judge_verdicts.labels(tenant=state.identity.tenant_id, verdict=outcome.verdict).inc()
     if outcome.accepted:
         return {"judge_scores": outcome.scores, "verdict": "approve"}
 
@@ -552,6 +542,12 @@ async def _quality_gate(state: AgentState, deps: GraphDeps) -> dict[str, Any]:
         # answer the judge just rejected.
         update["plan"] = []
     return update
+
+
+def _metrics() -> Any:
+    from agent_forge.observability.metrics import get_metrics
+
+    return get_metrics()
 
 
 async def _respond(state: AgentState, deps: GraphDeps) -> dict[str, Any]:
@@ -741,6 +737,27 @@ def _build_messages(state: AgentState, deps: GraphDeps) -> list[dict[str, str]]:
 # ----------------------------------------------------------------------- build
 
 
+def _instrumented(name: str, node: Any, deps: GraphDeps) -> Any:
+    """Wrap one node in its span and its latency histogram.
+
+    ``partial()`` alone would keep the node a coroutine function, which is how LangGraph
+    decides to await it; an ``async def`` wrapper is one too, so the same holds here. A
+    plain lambda would hand LangGraph a coroutine object and the graph would fail.
+    """
+    bound = partial(node, deps=deps)
+
+    async def run(state: AgentState) -> dict[str, Any]:
+        tenant = state.identity.tenant_id
+        with (
+            span_for_state(f"graph.node.{name}", state, node=name),
+            _metrics().time_node(tenant, name),
+        ):
+            return cast("dict[str, Any]", await bound(state))
+
+    run.__name__ = f"node_{name}"
+    return run
+
+
 def build_graph(deps: GraphDeps, checkpointer: BaseCheckpointSaver[str] | None = None) -> Any:
     """Compile the agent graph.
 
@@ -749,8 +766,9 @@ def build_graph(deps: GraphDeps, checkpointer: BaseCheckpointSaver[str] | None =
     """
     builder: StateGraph[AgentState, None, AgentState, AgentState] = StateGraph(AgentState)
 
-    # partial() keeps the node a coroutine function, which is how LangGraph decides to
-    # await it. A lambda would hand it a coroutine object and the graph would fail.
+    # Every node is wrapped once, here, rather than instrumented eight times by hand:
+    # a node somebody adds later is traced and timed because it was registered, not
+    # because they remembered.
     for name, node in (
         ("intake", _intake),
         ("governance_gate", _governance_gate),
@@ -761,7 +779,7 @@ def build_graph(deps: GraphDeps, checkpointer: BaseCheckpointSaver[str] | None =
         ("quality_gate", _quality_gate),
         ("respond", _respond),
     ):
-        builder.add_node(name, partial(node, deps=deps))
+        builder.add_node(name, _instrumented(name, node, deps))
 
     builder.add_edge(START, "intake")
     builder.add_edge("intake", "governance_gate")

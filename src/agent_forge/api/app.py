@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from agent_forge import __version__
-from agent_forge.api import admin, health
+from agent_forge.api import admin, health, metrics
 from agent_forge.channels import n8n_callback, openai_api
 from agent_forge.core.errors import AgentForgeError, ProfileError
 from agent_forge.observability.logging import clear_request_context, get_logger
@@ -64,6 +64,7 @@ def create_app(
     _install_error_handlers(app)
 
     app.include_router(health.router)
+    app.include_router(metrics.router)
     app.include_router(admin.router)
     return app
 

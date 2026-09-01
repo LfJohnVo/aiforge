@@ -1,0 +1,25 @@
+{"id": "g-01", "question": "Cual es el limite diario de viaticos nacionales?", "expects": ["1500"], "sources": ["viaticos-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-02", "question": "Y para viajes internacionales?", "expects": ["120"], "sources": ["viaticos-2"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-03", "question": "Cuanto tiempo tengo para entregar comprobantes de viaticos?", "expects": ["10", "dias"], "sources": ["viaticos-3"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-04", "question": "Que pasa si entrego los comprobantes tarde?", "expects": ["nomina"], "sources": ["viaticos-3"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-05", "question": "El hospedaje entra en el limite diario?", "expects": ["aparte", "factura"], "sources": ["viaticos-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-06", "question": "Necesito aprobacion para un viaje internacional?", "expects": ["director"], "sources": ["viaticos-2"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-07", "question": "Cuantas cotizaciones necesito para una compra de 80000 MXN?", "expects": ["tres"], "sources": ["compras-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-08", "question": "Y para una compra de 20000 MXN?", "expects": ["responsable"], "sources": ["compras-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-09", "question": "Cuanto tarda dar de alta un proveedor nuevo?", "expects": ["dos", "cinco"], "sources": ["compras-2"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-10", "question": "Que dia cierra la nomina?", "expects": ["25"], "sources": ["nomina-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas", "rrhh"], "ceiling": "C2"}}
+{"id": "g-11", "question": "Cuando se paga el aguinaldo?", "expects": ["diciembre"], "sources": ["nomina-2"], "requester": {"user_id": "u-eval", "groups": ["finanzas", "rrhh"], "ceiling": "C2"}}
+{"id": "g-12", "question": "A cuantos dias de salario equivale el aguinaldo?", "expects": ["15"], "sources": ["nomina-2"], "requester": {"user_id": "u-eval", "groups": ["finanzas", "rrhh"], "ceiling": "C2"}}
+{"id": "g-13", "question": "Cuanto dura el cierre contable mensual?", "expects": ["cinco"], "sources": ["cierre-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-14", "question": "Puedo escribir en el ERP durante el cierre?", "expects": ["solo lectura"], "sources": ["cierre-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-15", "question": "Quien firma las conciliaciones bancarias?", "expects": ["dos"], "sources": ["cierre-2"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-16", "question": "Puede la misma persona conciliar y autorizar?", "expects": ["no"], "sources": ["cierre-2"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}
+{"id": "g-17", "question": "Como recupero el acceso VPN?", "expects": ["certificado"], "sources": ["ti-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas", "ti"], "ceiling": "C2"}}
+{"id": "g-18", "question": "El ERP da error 500 durante el cierre, que reviso primero?", "expects": ["conexiones"], "sources": ["ti-2"], "requester": {"user_id": "u-eval", "groups": ["finanzas", "ti"], "ceiling": "C2"}}
+{"id": "g-19", "question": "Puedo reiniciar el ERP en pleno cierre?", "expects": ["fuera"], "sources": ["ti-2"], "requester": {"user_id": "u-eval", "groups": ["finanzas", "ti"], "ceiling": "C2"}}
+{"id": "g-20", "question": "Cual es el horario de la mesa de servicio?", "expects": ["8:00", "19:00"], "sources": ["ti-3"], "requester": {"user_id": "u-eval", "groups": [], "ceiling": "C0"}}
+{"id": "g-21", "question": "Cual es el objetivo de respuesta para prioridad alta?", "expects": ["hora"], "sources": ["ti-3"], "requester": {"user_id": "u-eval", "groups": [], "ceiling": "C0"}}
+{"id": "g-22", "question": "Con cuanta antelacion pido vacaciones?", "expects": ["quince"], "sources": ["rrhh-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas", "rrhh"], "ceiling": "C2"}}
+{"id": "g-23", "question": "Cuantos periodos de vacaciones puedo acumular?", "expects": ["dos"], "sources": ["rrhh-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas", "rrhh"], "ceiling": "C2"}}
+{"id": "g-24", "question": "Quien aprueba mis vacaciones?", "expects": ["responsable"], "sources": ["rrhh-1"], "requester": {"user_id": "u-eval", "groups": ["finanzas", "rrhh"], "ceiling": "C2"}}
+{"id": "g-25", "question": "Cual es el limite de viaticos y el plazo de comprobacion?", "expects": ["1500", "10"], "sources": ["viaticos-1", "viaticos-3"], "requester": {"user_id": "u-eval", "groups": ["finanzas"], "ceiling": "C2"}}

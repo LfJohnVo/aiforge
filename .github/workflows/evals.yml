@@ -60,7 +60,27 @@ jobs:
           OLLAMA_BASE_URL: http://127.0.0.1:11434
           # Datasets stay local: no C2+ content ever leaves, not even to evaluate.
           AGENT_FORGE_ENV: ci
-        run: uv run python scripts/run_evals.py --enforce-thresholds
+        run: uv run python scripts/run_evals.py --enforce-thresholds --ragas
+
+      - name: Verify the gate can actually fail
+        # A gate that has never failed is a gate nobody knows works. This raises
+        # groundedness above anything observable and expects a non-zero exit; if the run
+        # succeeds, the gate is not gating and this step is the one that says so.
+        env:
+          OLLAMA_BASE_URL: http://127.0.0.1:11434
+          AGENT_FORGE_ENV: ci
+        run: |
+          python - <<'EOF'
+          import pathlib, yaml
+          spec = yaml.safe_load(pathlib.Path("evals/thresholds.yaml").read_text())
+          spec["metrics"]["groundedness"]["threshold"] = 0.999
+          pathlib.Path("/tmp/impossible.yaml").write_text(yaml.safe_dump(spec))
+          EOF
+          if uv run python scripts/run_evals.py --enforce-thresholds                --thresholds /tmp/impossible.yaml --out /tmp/gate-check.json; then
+            echo "::error::the gate passed an impossible threshold; it is not gating"
+            exit 1
+          fi
+          echo "gate correctly failed an impossible threshold"
 
       - uses: actions/upload-artifact@v4
         if: always()

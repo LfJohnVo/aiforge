@@ -19,9 +19,11 @@ from typing import Any, Protocol, runtime_checkable
 import httpx
 
 from agent_forge.core.classification import Classification
-from agent_forge.core.errors import ModelGatewayError
+from agent_forge.core.errors import ModelGatewayError, SovereigntyError
 from agent_forge.gateway.model_policy import ModelPolicy, RoutingDecision
 from agent_forge.observability.logging import get_logger
+from agent_forge.observability.metrics import get_metrics
+from agent_forge.observability.tracing import span
 
 log = get_logger(__name__)
 
@@ -272,20 +274,51 @@ class GovernedGateway:
         max_tokens: int | None = None,
         tools: Sequence[Mapping[str, Any]] | None = None,
     ) -> ChatResponse:
-        decision = self.route(classification, preferred, require_tools=bool(tools))
-        # Re-check at the wire: state can change between routing and sending.
-        self._policy.assert_allowed(decision.alias, classification)
-        return await self._transport.complete(
-            ChatRequest(
-                messages=messages,
-                model=decision.alias,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                tools=tools,
-                tenant_id=tenant_id,
-                trace_id=trace_id,
+        decision = self._decide(classification, preferred, tenant_id, require_tools=bool(tools))
+        with span(
+            f"llm.{decision.alias}",
+            tenant_id=tenant_id,
+            model=decision.alias,
+            sovereignty=str(decision.backend.sovereignty),
+            classification=str(classification),
+        ):
+            response = await self._transport.complete(
+                ChatRequest(
+                    messages=messages,
+                    model=decision.alias,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    tools=tools,
+                    tenant_id=tenant_id,
+                    trace_id=trace_id,
+                )
             )
-        )
+        get_metrics().observe_usage(tenant_id or "_", decision.alias, response)
+        return response
+
+    def _decide(
+        self,
+        classification: Classification,
+        preferred: Sequence[str],
+        tenant_id: str,
+        *,
+        require_tools: bool = False,
+    ) -> RoutingDecision:
+        """Route, then re-check at the wire, counting a refusal as a security event.
+
+        The re-check is not redundant: state can change between routing and sending, and
+        `agentforge_external_model_blocked_total` moving is how an operator learns that
+        something tried to send classified data out.
+        """
+        try:
+            decision = self.route(classification, preferred, require_tools=require_tools)
+            self._policy.assert_allowed(decision.alias, classification)
+        except SovereigntyError:
+            get_metrics().external_blocked.labels(
+                tenant=tenant_id or "_", classification=str(classification)
+            ).inc()
+            raise
+        return decision
 
     async def stream(
         self,
@@ -298,8 +331,7 @@ class GovernedGateway:
         temperature: float = 0.2,
         max_tokens: int | None = None,
     ) -> AsyncIterator[ChatChunk]:
-        decision = self.route(classification, preferred)
-        self._policy.assert_allowed(decision.alias, classification)
+        decision = self._decide(classification, preferred, tenant_id)
         async for chunk in self._transport.stream(
             ChatRequest(
                 messages=messages,

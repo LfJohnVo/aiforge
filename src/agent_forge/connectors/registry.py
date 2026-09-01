@@ -33,6 +33,7 @@ from agent_forge.core.classification import Classification
 from agent_forge.core.errors import AgentForgeError, AuthorizationError
 from agent_forge.core.subgraphs.base import ToolDescriptor
 from agent_forge.observability.logging import get_logger
+from agent_forge.observability.metrics import get_metrics
 
 log = get_logger(__name__)
 
@@ -258,7 +259,9 @@ class ConnectorRegistry:
         args_digest = digest(args)
         spec = self.find_spec(tool)
         if spec is None:
-            return self._record(tool, None, ToolResult.failure("unknown tool"), args_digest)
+            return self._record(
+                tool, None, ToolResult.failure("unknown tool"), args_digest, ctx.tenant_id
+            )
 
         if not self._allowlist.permits(tool):
             log.warning("connector.tool_not_allowlisted", tool=tool, tenant_id=ctx.tenant_id)
@@ -267,7 +270,11 @@ class ConnectorRegistry:
         health = await self.check_health()
         if not health.get(spec.connector, False):
             return self._record(
-                tool, spec, ToolResult.failure("connector is not healthy"), args_digest
+                tool,
+                spec,
+                ToolResult.failure("connector is not healthy"),
+                args_digest,
+                ctx.tenant_id,
             )
 
         if self._policy is not None and not await self._policy(tool, args, ctx):
@@ -287,7 +294,9 @@ class ConnectorRegistry:
         try:
             result = await self.get(spec.connector).invoke(tool, args, ctx)
         except AgentForgeError as exc:
-            return self._record(tool, spec, ToolResult.failure(exc.message), args_digest)
+            return self._record(
+                tool, spec, ToolResult.failure(exc.message), args_digest, ctx.tenant_id
+            )
         except Exception as exc:
             log.exception("connector.unhandled_error", tool=tool)
             return self._record(
@@ -295,13 +304,24 @@ class ConnectorRegistry:
                 spec,
                 ToolResult.failure(f"unhandled: {type(exc).__name__}"),
                 args_digest,
+                ctx.tenant_id,
             )
 
-        return self._record(tool, spec, result, args_digest)
+        return self._record(tool, spec, result, args_digest, ctx.tenant_id)
 
     def _record(
-        self, tool: str, spec: ToolSpec | None, result: ToolResult, args_digest: str
+        self,
+        tool: str,
+        spec: ToolSpec | None,
+        result: ToolResult,
+        args_digest: str,
+        tenant_id: str = "",
     ) -> ToolResult:
+        """Log, count and return one invocation's outcome.
+
+        Every path out of ``invoke`` funnels through here, which is why the counter lives
+        here: a metric incremented at four call sites is a metric that misses the fifth.
+        """
         record = ToolInvocationRecord(
             tool=tool,
             connector=spec.connector if spec else tool.split(".", 1)[0],
@@ -313,6 +333,12 @@ class ConnectorRegistry:
             error=result.error,
         )
         self.invocations.append(record)
+        get_metrics().tool_calls.labels(
+            tenant=tenant_id or "_",
+            connector=record.connector,
+            tool=tool,
+            outcome="ok" if result.ok else "error",
+        ).inc()
         log.info("connector.invoked", **record.to_dict())
         return result
 

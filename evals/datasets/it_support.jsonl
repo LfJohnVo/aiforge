@@ -1,0 +1,15 @@
+{"id": "it-01", "question": "No me conecta la VPN desde ayer", "expects": ["certificado"], "sources": ["ti-1"], "requester": {"user_id": "u-eval", "groups": ["ti"], "ceiling": "C2"}}
+{"id": "it-02", "question": "Que hago si el certificado de VPN caduco?", "expects": ["reemision"], "sources": ["ti-1"], "requester": {"user_id": "u-eval", "groups": ["ti"], "ceiling": "C2"}}
+{"id": "it-03", "question": "El ERP devuelve 500, es urgente porque estamos en cierre", "expects": ["conexiones"], "sources": ["ti-2"], "requester": {"user_id": "u-eval", "groups": ["ti"], "ceiling": "C2"}}
+{"id": "it-04", "question": "Puedo reiniciar el servicio del ERP ahora mismo?", "expects": ["fuera", "horario"], "sources": ["ti-2"], "requester": {"user_id": "u-eval", "groups": ["ti"], "ceiling": "C2"}}
+{"id": "it-05", "question": "A que hora abre la mesa de servicio?", "expects": ["8:00"], "sources": ["ti-3"], "requester": {"user_id": "u-eval", "groups": [], "ceiling": "C0"}}
+{"id": "it-06", "question": "Cuanto tardan en responder un ticket critico?", "expects": ["hora"], "sources": ["ti-3"], "requester": {"user_id": "u-eval", "groups": [], "ceiling": "C0"}}
+{"id": "it-07", "question": "La mesa de servicio atiende fines de semana?", "expects": ["lunes", "viernes"], "sources": ["ti-3"], "requester": {"user_id": "u-eval", "groups": [], "ceiling": "C0"}}
+{"id": "it-08", "question": "Pasos para restablecer el acceso VPN, en orden", "expects": ["reiniciar"], "sources": ["ti-1"], "requester": {"user_id": "u-eval", "groups": ["ti"], "ceiling": "C2"}}
+{"id": "it-09", "question": "Donde solicito la reemision del certificado?", "expects": ["portal"], "sources": ["ti-1"], "requester": {"user_id": "u-eval", "groups": ["ti"], "ceiling": "C2"}}
+{"id": "it-10", "question": "Que reviso antes de escalar un error 500 del ERP?", "expects": ["pool"], "sources": ["ti-2"], "requester": {"user_id": "u-eval", "groups": ["ti"], "ceiling": "C2"}}
+{"id": "it-11", "question": "El cierre bloquea el ERP para TI tambien?", "expects": ["solo lectura"], "sources": ["cierre-1"], "requester": {"user_id": "u-eval", "groups": ["ti", "finanzas"], "ceiling": "C2"}}
+{"id": "it-12", "question": "Cuantos dias dura la ventana de cierre?", "expects": ["cinco"], "sources": ["cierre-1"], "requester": {"user_id": "u-eval", "groups": ["ti", "finanzas"], "ceiling": "C2"}}
+{"id": "it-13", "question": "Como doy de alta a un proveedor de software en el ERP?", "expects": ["alta"], "sources": ["compras-2"], "requester": {"user_id": "u-eval", "groups": ["ti", "finanzas"], "ceiling": "C2"}}
+{"id": "it-14", "question": "Cuanto tarda el alta de proveedor?", "expects": ["dias"], "sources": ["compras-2"], "requester": {"user_id": "u-eval", "groups": ["ti", "finanzas"], "ceiling": "C2"}}
+{"id": "it-15", "question": "Necesito tres cotizaciones para un servidor de 90000 MXN?", "expects": ["tres"], "sources": ["compras-1"], "requester": {"user_id": "u-eval", "groups": ["ti", "finanzas"], "ceiling": "C2"}}

@@ -207,6 +207,16 @@ class TaskRunner:
     def store(self) -> TaskStore:
         return self._store
 
+    @property
+    def invoke(self) -> Callable[[AgentState], Awaitable[AgentState]]:
+        """The graph call this runner wraps.
+
+        Exposed for callers that need the whole final state rather than a task record --
+        the eval harness scores citations, findings and the accumulated classification,
+        none of which a record carries.
+        """
+        return self._invoke
+
     def build_state(
         self, question: str, identity: Identity, *, thread_id: str = "", task_id: str = ""
     ) -> AgentState:

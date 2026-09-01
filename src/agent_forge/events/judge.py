@@ -22,12 +22,13 @@ it can still verify, and says so in its reasons.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from agent_forge.core.graph import QualityVerdict
-from agent_forge.core.state import AgentState, Verdict
-from agent_forge.governance.dlp import DlpResult
+from agent_forge.core.state import AgentState, QualityVerdict, Verdict
 from agent_forge.observability.logging import get_logger
+
+if TYPE_CHECKING:
+    from agent_forge.governance.dlp import DlpResult
 
 log = get_logger(__name__)
 
