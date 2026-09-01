@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Environment & secrets - NEVER commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!configs/**/*.key.example
+secrets/
+
+# Runtime data
+data/
+var/
+*.db
+*.sqlite3
+ledger/*.jsonl
+!ledger/.gitkeep
+
+# Generated artefacts (repo-graph writes these; regenerate with `make repo-graph`)
+docs/graphs/*.json
+docs/graphs/*.graphml
+sbom.json
+*.sarif
+
+# Generated instances (each is a deployment, not source)
+instances/*/
+!instances/.gitkeep
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Node (promptfoo)
+node_modules/

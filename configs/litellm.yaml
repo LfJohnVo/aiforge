@@ -1,0 +1,116 @@
+# ==============================================================================
+# LiteLLM Proxy - Model Gateway local de la celula.
+# Replica funcional del Model Gateway central del diagrama PEAK: keys virtuales
+# por tenant, budgets, rate limits, fallbacks y logging de costos.
+#
+# IMPORTANTE: este fichero define QUE backends existen. La decision de CUAL usar
+# para una peticion concreta la toma agent_forge/gateway/model_policy.py a partir
+# de la clasificacion acumulada (C0-C4). LiteLLM no decide soberania de datos:
+# un modelo externo listado aqui no implica que se pueda usar.
+# ==============================================================================
+model_list:
+  # ---------------------------------------------------------------- locales
+  # Unicos permitidos para C3/C4. Corren on-prem, sin salida a red.
+  - model_name: local/fast
+    litellm_params:
+      model: hosted_vllm/Qwen/Qwen3-8B
+      api_base: os.environ/VLLM_BASE_URL
+      api_key: "not-needed"
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      metadata:
+        sovereignty: local
+        max_classification: C4
+
+  - model_name: local/quality
+    litellm_params:
+      model: hosted_vllm/Qwen/Qwen3-32B
+      api_base: os.environ/VLLM_BASE_URL
+      api_key: "not-needed"
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      metadata:
+        sovereignty: local
+        max_classification: C4
+
+  # Desarrollo en laptop. Mismo contrato, sin GPU.
+  - model_name: local/dev
+    litellm_params:
+      model: ollama_chat/qwen3:8b
+      api_base: os.environ/OLLAMA_BASE_URL
+    model_info:
+      mode: chat
+      metadata:
+        sovereignty: local
+        max_classification: C4
+
+  # Embeddings y rerank: SIEMPRE locales. Enviar contenido C2+ a un servicio
+  # externo de embeddings es la fuga que mas facil se pasa por alto.
+  - model_name: local/embeddings
+    litellm_params:
+      model: hosted_vllm/BAAI/bge-m3
+      api_base: os.environ/VLLM_BASE_URL
+      api_key: "not-needed"
+    model_info:
+      mode: embedding
+      metadata:
+        sovereignty: local
+        max_classification: C4
+
+  # ---------------------------------------------------- externos gobernados
+  # Solo C0-C2 desensibilizado. Contrato sin retencion ni entrenamiento.
+  - model_name: anthropic/claude
+    litellm_params:
+      model: anthropic/claude-sonnet-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      metadata:
+        sovereignty: external
+        max_classification: C2
+
+  - model_name: azure/gpt
+    litellm_params:
+      model: azure/gpt-4.1
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_version: "2024-10-21"
+    model_info:
+      mode: chat
+      metadata:
+        sovereignty: external
+        max_classification: C2
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 2
+  timeout: 120
+  allowed_fails: 3
+  cooldown_time: 30
+  # Fallbacks SOLO entre modelos de la misma soberania. Un fallback de local a
+  # externo convertiria una degradacion en una fuga de datos.
+  fallbacks:
+    - local/quality: ["local/fast"]
+    - local/fast: ["local/dev"]
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  # La cache de LiteLLM es por prompt exacto. La cache semantica de la celula
+  # (memory/semantic_cache.py) es la que respeta clasificacion y grupos.
+  cache: false
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+  json_logs: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/POSTGRES_DSN
+  # Presupuesto por tenant: la key virtual la crea la celula al registrar el tenant.
+  max_budget: 1000
+  budget_duration: 30d
+  disable_spend_logs: false
+  health_check_interval: 60

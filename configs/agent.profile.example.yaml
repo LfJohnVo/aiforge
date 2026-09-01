@@ -1,0 +1,182 @@
+# ==============================================================================
+# Agent Forge · perfil de instancia
+# ------------------------------------------------------------------------------
+# Este archivo es el corazon de la reutilizacion: instalar la celula en otra area
+# o empresa es copiar este fichero, editarlo y ajustar el .env. Cero codigo.
+#
+# Validado con Pydantic al arranque (src/agent_forge/profile/). Un perfil invalido
+# impide el arranque con un error accionable, nunca con un fallo tardio.
+#
+# ${VAR} se resuelve desde el entorno. Si la variable no existe y el campo es
+# obligatorio, el arranque falla; nunca se sustituye por cadena vacia.
+# ==============================================================================
+schema_version: 1
+
+# ------------------------------------------------------------------------------
+# Identidad: quien es esta celula
+# ------------------------------------------------------------------------------
+identity:
+  agent_name: "asistente-finanzas"      # unico por instancia
+  tenant_id: "acme-mx"                  # frontera dura de aislamiento
+  area: "finanzas"                      # libre: soc, ciber, rrhh, ventas...
+  language: "es"
+  persona: >
+    Asistente experto del area de Finanzas de ACME. Formal, preciso, cita siempre
+    sus fuentes. Si no encuentra respaldo documental, lo dice en lugar de suponer.
+
+# ------------------------------------------------------------------------------
+# Dominio: que subgrafo carga
+# ------------------------------------------------------------------------------
+domain:
+  subgraph: "generalist"                # registrado en agent_forge.subgraphs
+  intents_extra: ["conciliacion", "presupuesto"]
+
+# ------------------------------------------------------------------------------
+# Autonomia A0-A4
+#   A0 solo lectura · A1 reversible · A2 requiere aprobacion
+#   A3 requiere rol elevado · A4 doble aprobacion
+# El nivel efectivo de una accion es el MAXIMO entre este mapa, el autonomy_min
+# declarado por la tool, y lo que imponga el PDP. Nadie puede bajarlo.
+# ------------------------------------------------------------------------------
+autonomy:
+  default: A1
+  overrides:
+    enviar_correo: A2
+    modificar_erp: A3
+
+# ------------------------------------------------------------------------------
+# Canales (downstream). Un canal desactivado no monta su router.
+# ------------------------------------------------------------------------------
+channels:
+  openai_api: { enabled: true }
+  openwebui: { enabled: true }
+  copilot_studio: { enabled: false }
+  teams: { enabled: false }
+  slack: { enabled: false }
+  websocket: { enabled: true }
+
+# ------------------------------------------------------------------------------
+# Upstream: como la orquesta un modelo superior
+# ------------------------------------------------------------------------------
+upstream:
+  mcp_server: { enabled: true }
+  a2a: { enabled: true }
+  openapi: { enabled: true }
+  orchestrator: "standalone"            # standalone | copilot_studio | bedrock | vllm_supervisor
+
+# ------------------------------------------------------------------------------
+# Conocimiento
+# ------------------------------------------------------------------------------
+knowledge:
+  sources:
+    - type: sharepoint
+      site: "https://acme.sharepoint.com/sites/finanzas"
+      drives: ["Documentos"]
+      sync_cron: "0 */6 * * *"
+      # Grupos que heredan los documentos de esta fuente si el origen no declara ACL.
+      default_acl_groups: ["finanzas"]
+    - type: folder
+      path: "/data/finanzas"
+      sync_cron: "0 * * * *"
+      default_acl_groups: ["finanzas"]
+  rag:
+    enabled: true
+    top_k: 8
+    rerank: true
+    hybrid: true                        # BM25 + vectorial + grafo, fusion RRF
+  graphrag:
+    enabled: true
+  cag:
+    enabled: true
+    stable_corpus: ["politicas/**.md"]
+  # Clasificacion aplicada cuando la ingesta no puede determinarla. Nunca C0:
+  # equivocarse a la baja es la unica direccion peligrosa.
+  default_classification: C2
+
+# ------------------------------------------------------------------------------
+# Modelos. Alias resueltos en configs/litellm.yaml; el perfil nunca nombra un
+# modelo concreto, para que cambiar de familia no toque los perfiles.
+# ------------------------------------------------------------------------------
+models:
+  fast: "local/fast"                    # ~7-14B, razonamiento rapido
+  quality: "local/quality"              # ~70B, calidad
+  # Solo se usan con datos C0-C2 desensibilizados. C3/C4 jamas sale de aqui,
+  # independientemente de lo que diga esta lista.
+  external_allowed: ["anthropic/claude"]
+  budgets:
+    monthly_usd: 300
+
+# ------------------------------------------------------------------------------
+# Memoria
+# ------------------------------------------------------------------------------
+memory:
+  stm_ttl_minutes: 240
+  ltm:
+    enabled: true
+    scope: "area"                       # user | area | tenant
+  episodic:
+    enabled: true
+  semantic_cache:
+    enabled: true
+    similarity: 0.92
+    ttl_hours: 72
+  retention_days: 365
+
+# ------------------------------------------------------------------------------
+# Conectores. La allowlist es la lista COMPLETA de tools visibles para el modelo;
+# lo que no este aqui no existe, aunque el gateway lo ofrezca.
+# ------------------------------------------------------------------------------
+connectors:
+  mcp_gateway:
+    url: "${MCP_GATEWAY_URL}"
+    allowlist: ["jira.*", "graph_api.read_*"]
+  n8n:
+    url: "${N8N_URL}"
+    workflows: ["facturas-ocr"]
+  databases:
+    - type: postgres
+      alias: "erp_ro"
+      dsn_env: "ERP_PG_DSN"
+      readonly: true
+
+# ------------------------------------------------------------------------------
+# Gobernanza
+# ------------------------------------------------------------------------------
+governance:
+  pdp_url: "${GOVERNANCE_PDP_URL}"
+  # closed = niega C2+ y A2+ sin decision fresca (recomendado).
+  # permissive_c0c1 = ademas permite C0/C1 con politicas cacheadas expiradas.
+  # Ni siquiera permissive_c0c1 levanta la restriccion para C3/C4 ni A2+.
+  fail_mode: closed
+  hitl_approvers_group: "finanzas-lideres"
+  dlp:
+    enabled: true
+    rules_file: "configs/policies/dlp_rules.yaml"
+
+# ------------------------------------------------------------------------------
+# Event fabric
+# ------------------------------------------------------------------------------
+events:
+  fabric_url: "${NATS_URL}"
+  aggregator: { enabled: true }
+  judge:
+    mode: "platform"                    # platform | local
+    thresholds:
+      groundedness: 0.85
+      safety: 0.95
+    max_retries: 2                      # superado, escala a HITL
+
+# ------------------------------------------------------------------------------
+# Observabilidad
+# ------------------------------------------------------------------------------
+observability:
+  otel_endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+  langfuse: { enabled: true }
+  metrics: { enabled: true }
+
+# ------------------------------------------------------------------------------
+# Analitica de series de tiempo (RF-14). Desactivada por defecto a proposito:
+# solo tiene sentido en dominios con telemetria, como SOC.
+# ------------------------------------------------------------------------------
+analytics:
+  enabled: false

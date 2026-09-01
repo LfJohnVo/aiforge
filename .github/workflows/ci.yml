@@ -1,0 +1,105 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+
+jobs:
+  check:
+    name: lint · types · unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Sync environment
+        run: uv sync --extra dev --extra databases
+
+      - name: Lint
+        run: |
+          uv run ruff check src tests scripts
+          uv run ruff format --check src tests scripts
+
+      - name: Types (strict)
+        run: uv run mypy
+
+      - name: Unit and policy tests
+        run: uv run pytest tests/unit tests/policies -m "not integration and not e2e"
+
+      - name: Documentation completeness
+        run: uv run python scripts/docs_check.py
+
+  coverage:
+    name: coverage gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - run: uv sync --extra dev --extra databases
+
+      - name: Run with coverage
+        run: uv run pytest tests/unit tests/policies --cov --cov-report=xml
+
+      - name: Per-package gate (core, governance, knowledge)
+        run: |
+          uv run python scripts/coverage_gate.py --min 80 \
+            --package agent_forge/core \
+            --package agent_forge/governance \
+            --package agent_forge/knowledge
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  integration:
+    name: integration (testcontainers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - run: uv sync --extra dev --extra databases
+
+      - name: Integration tests
+        run: uv run pytest tests/integration -m integration
+
+  lock:
+    name: lockfile is current
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - name: uv.lock matches pyproject.toml
+        run: uv lock --check

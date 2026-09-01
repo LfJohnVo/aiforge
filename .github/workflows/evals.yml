@@ -1,0 +1,69 @@
+name: evals
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "configs/prompts/**"
+      - "evals/**"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  invariants:
+    # These have no threshold: they are invariants, not metrics. A single failure is a
+    # blocking security defect (DoD 8).
+    name: invariants (C3/C4 never external · ACL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --extra dev
+      - name: Data sovereignty and access control
+        run: uv run pytest tests/unit -m "not integration" -k "model_policy or access_control or dlp"
+
+  harness:
+    name: quality and safety thresholds
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: invariants
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - run: uv sync --extra dev --extra evals
+
+      - name: Start Ollama for the local judge
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          for i in $(seq 1 30); do curl -fsS localhost:11434 >/dev/null && break; sleep 2; done
+          ollama pull qwen3:8b
+
+      - name: Run evals with thresholds enforced
+        env:
+          OLLAMA_BASE_URL: http://127.0.0.1:11434
+          # Datasets stay local: no C2+ content ever leaves, not even to evaluate.
+          AGENT_FORGE_ENV: ci
+        run: uv run python scripts/run_evals.py --enforce-thresholds
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: evals/results/
