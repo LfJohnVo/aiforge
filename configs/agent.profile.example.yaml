@@ -143,7 +143,9 @@ connectors:
 # Gobernanza
 # ------------------------------------------------------------------------------
 governance:
-  pdp_url: "${GOVERNANCE_PDP_URL}"
+  # Vacio = sin PDP remoto: decide solo la base Rego local. Es un despliegue valido
+  # (un portatil, una sede aislada), no uno degradado.
+  pdp_url: "${GOVERNANCE_PDP_URL:-}"
   # closed = niega C2+ y A2+ sin decision fresca (recomendado).
   # permissive_c0c1 = ademas permite C0/C1 con politicas cacheadas expiradas.
   # Ni siquiera permissive_c0c1 levanta la restriccion para C3/C4 ni A2+.
@@ -157,7 +159,8 @@ governance:
 # Event fabric
 # ------------------------------------------------------------------------------
 events:
-  fabric_url: "${NATS_URL}"
+  # Vacio = bus en proceso. El modo standalone cierra su propio ciclo con el juez local.
+  fabric_url: "${NATS_URL:-}"
   aggregator: { enabled: true }
   judge:
     mode: "platform"                    # platform | local

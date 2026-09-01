@@ -44,6 +44,7 @@ from agent_forge.core.state import (
     Message,
     PolicyDecision,
     ToolInvocation,
+    Verdict,
 )
 from agent_forge.core.subgraphs.base import (
     DomainContext,
@@ -82,13 +83,31 @@ class GateOutcome:
     redacted_text: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class QualityVerdict:
+    """What the judge concluded about an answer.
+
+    The verdict, not just the scores: the thresholds live with the judge, where the
+    profile configures them, so the gate does not need to know what "good enough" means
+    for this deployment. Its job is the retry budget and the routing.
+    """
+
+    verdict: Verdict = "approve"
+    scores: dict[str, float] = field(default_factory=dict)
+    reasons: tuple[str, ...] = ()
+
+    @property
+    def accepted(self) -> bool:
+        return self.verdict == "approve"
+
+
 # Injected by the API layer. F1 ships the identity-derived default below; F6 replaces it
 # with the PDP client and the DLP engine without touching this file.
 GovernanceHook = Callable[[AgentState], Awaitable[GateOutcome]]
 # (tool, args, state) -> result payload. Provided by the connector registry in F4.
 ToolExecutor = Callable[[str, dict[str, Any], AgentState], Awaitable[dict[str, Any]]]
-# (state) -> scores. Provided by the judge in F6.
-QualityHook = Callable[[AgentState], Awaitable[dict[str, float]]]
+# (state) -> verdict. Provided by the judge in F6.
+QualityHook = Callable[[AgentState], Awaitable["QualityVerdict"]]
 
 
 async def identity_gate(state: AgentState) -> GateOutcome:
@@ -499,29 +518,40 @@ async def _quality_gate(state: AgentState, deps: GraphDeps) -> dict[str, Any]:
     if deps.quality is None:
         return {"verdict": "approve"}
 
-    scores = await deps.quality(state)
-    failed = [name for name, value in scores.items() if value < 0.0]
-    verdict = "approve" if not failed else "retry"
+    outcome = await deps.quality(state)
+    if outcome.accepted:
+        return {"judge_scores": outcome.scores, "verdict": "approve"}
 
-    if verdict == "retry" and state.retries >= deps.max_retries:
-        # Out of retries: escalate rather than loop or silently ship a bad answer.
-        log.warning("graph.retry_budget_exhausted", retries=state.retries)
+    if outcome.verdict == "escalate":
+        log.info("graph.judge_escalated", reasons=list(outcome.reasons))
         return {
-            "judge_scores": scores,
+            "judge_scores": outcome.scores,
             "verdict": "escalate",
             "status": "awaiting_approval",
         }
-    if verdict == "retry":
+
+    if state.retries >= deps.max_retries:
+        # Out of retries: escalate rather than loop or silently ship a bad answer.
+        log.warning("graph.retry_budget_exhausted", retries=state.retries)
         return {
-            "judge_scores": scores,
-            "verdict": "retry",
-            "retries": state.retries + 1,
-            "scratchpad": {
-                **state.scratchpad,
-                "judge_feedback": f"criterios por debajo del umbral: {', '.join(failed)}",
-            },
+            "judge_scores": outcome.scores,
+            "verdict": "escalate",
+            "status": "awaiting_approval",
         }
-    return {"judge_scores": scores, "verdict": "approve"}
+
+    feedback = "; ".join(outcome.reasons) or "el juez rechazo la respuesta"
+    update: dict[str, Any] = {
+        "judge_scores": outcome.scores,
+        "verdict": outcome.verdict,
+        "retries": state.retries + 1,
+        "scratchpad": {**state.scratchpad, "judge_feedback": feedback},
+    }
+    if outcome.verdict == "replan":
+        # A replan discards the plan; a retry keeps it and tries the same steps again
+        # with the judge's feedback. Keeping the plan on a replan would reproduce the
+        # answer the judge just rejected.
+        update["plan"] = []
+    return update
 
 
 async def _respond(state: AgentState, deps: GraphDeps) -> dict[str, Any]:
@@ -556,7 +586,7 @@ def _after_gate(state: AgentState) -> str:
 
 
 def _after_quality(state: AgentState) -> str:
-    if state.verdict == "retry":
+    if state.verdict in {"retry", "replan"}:
         return "planner"
     return "respond"
 

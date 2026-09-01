@@ -113,10 +113,15 @@ def make_gateway(
     transport: FakeTransport | None = None,
     *,
     external_allowed: Sequence[str] = ("anthropic/claude",),
+    backends: Sequence[ModelBackend] | None = None,
 ) -> GovernedGateway:
-    return GovernedGateway(
-        transport or FakeTransport(), make_policy(), external_allowed=external_allowed
-    )
+    """A gateway over the fake transport.
+
+    ``backends`` narrows what is available, which is how a test can ask the question that
+    matters for sovereignty: what happens when the *only* backend on offer is external.
+    """
+    policy = ModelPolicy(list(backends)) if backends is not None else make_policy()
+    return GovernedGateway(transport or FakeTransport(), policy, external_allowed=external_allowed)
 
 
 def make_prompts() -> PromptRegistry:

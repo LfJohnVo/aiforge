@@ -23,7 +23,7 @@ from agent_forge.core.errors import AuthenticationError
 from agent_forge.core.subgraphs.base import ToolDescriptor
 from agent_forge.core.subgraphs.it_support import ItSupportSubgraph
 from agent_forge.runtime import Runtime
-from tests.cell import API_KEY, TENANT, make_app, make_runtime
+from tests.cell import API_KEY, TENANT, cell_env, make_app, make_runtime
 from tests.support import FakeTransport
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -233,7 +233,7 @@ async def test_admin_rejects_a_bare_tenant_api_key(client: httpx.AsyncClient) ->
 
 
 async def test_admin_config_never_returns_secrets() -> None:
-    runtime = make_runtime(FakeTransport())
+    runtime = make_runtime(FakeTransport(), env=cell_env(GOVERNANCE_PDP_URL="http://opa:8181"))
 
     from agent_forge.api.admin import effective_config
     from agent_forge.core.state import Identity

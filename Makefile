@@ -45,10 +45,12 @@ test-policies: ## Rego policy tests
 test: ## Full pytest suite
 	$(RUN) pytest
 
-cov: ## Coverage gate for core/, governance/, knowledge/
+cov: ## Coverage gate: whole package plus core/, governance/, knowledge/
 	$(RUN) pytest --cov --cov-report=term-missing --cov-report=xml
-	$(RUN) python scripts/coverage_gate.py --min 80 \
+	$(RUN) python scripts/coverage_gate.py --min 80 --package agent_forge \
 		--package agent_forge/core --package agent_forge/governance --package agent_forge/knowledge
+	@echo "note: the real adapters (Redis, Qdrant, Postgres, NATS) are covered by"
+	@echo "      tests/integration, which self-skips without Docker. Run 'make test-integration'."
 
 check: lint type test-unit ## Fast pre-commit gate: lint + types + unit tests
 

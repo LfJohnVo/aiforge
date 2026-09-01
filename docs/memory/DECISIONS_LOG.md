@@ -394,3 +394,106 @@ un orquestador.
 Cobertura global 82.7 %; 440 tests unit + policy, 1 saltado por plataforma.
 
 **Siguiente:** F6 · gobernanza, ciclo Agregador/Judge y evidencia.
+
+## 2026-09-01 · F6 · Gobernanza, ciclo Agregador/Judge y evidencia
+
+### D-039 · La base de politicas existe dos veces, y una tabla de casos las iguala
+**Contexto:** RF-09 pide Rego revisable por la plataforma *y* que la celula siga decidiendo
+con el PDP caido, por cada chunk y antes de cada tool.
+**Decision:** escribir la base dos veces —`configs/policies/*.rego` y `LocalPdp`— y
+ejecutar una sola tabla (`tests/policies/cases.py`) por ambos caminos. No hay interprete
+de Rego maduro para Python, y un sidecar OPA obligatorio contradice el requisito de
+funcionar aislada. Registrado como
+[ADR-008](../adr/ADR-008-policy-two-implementations.md).
+
+### D-040 · El overlay remoto solo puede estrechar
+**Razon:** `decisions.combine` hace `allow` por conjuncion, el techo por minimo y la
+autonomia requerida por maximo. Si un overlay pudiera permitir lo que la base prohibe, una
+mala configuracion remota bastaria para abrir un tenant entero. La direccion del fallo
+importa mas que su probabilidad.
+
+### D-041 · C3/C4 y A2+ nunca corren sin decision fresca, y eso no es configurable
+**Razon:** `fail_mode` distingue que hacer con C0/C1 cuando el PDP no responde; para lo
+demas no hay modo. Lo impone `PolicyRequest.needs_fresh_decision`, consultado **antes** de
+mirar la cache, de modo que ninguna entrada cacheada por fresca que sea sustituye a una
+decision viva sobre dato restringido o accion con efecto.
+
+### D-042 · El DLP se ejecuta antes que el PDP
+**Razon:** el DLP inspecciona texto y puede terminar la peticion; el PDP decide sobre
+hechos. Preguntar al PDP por algo que se va a bloquear gasta una llamada y, peor, acerca el
+texto sin depurar a un servicio remoto.
+
+### D-043 · La deteccion de PII no se reimplementa en el DLP
+**Razon:** `memory/scrubbing.py` ya tiene regex con checksum (Luhn, mod-97, RFC/CURP/NIF) y
+Presidio opcional encima. Dos detectores serian dos juegos de reglas que se desincronizan,
+y el dia que discrepan uno de los dos esta mal.
+
+### D-044 · Un hallazgo del DLP nunca lleva el texto que lo disparo
+**Razon:** un registro sobre un secreto no puede contener ese secreto. `DlpMatch` guarda
+id de regla, severidad, accion y cuenta.
+
+### D-045 · El ledger guarda digests, jamas contenido
+**Razon:** una cadena de evidencia se conserva años y la leen personas sin derecho al
+contenido del tenant. Guardar prompts o respuestas ahi convertiria la pista de auditoria en
+la mayor copia sin clasificar de todo lo que la celula ha visto. El hash cubre **todos** los
+campos, metadatos incluidos: lo que quede fuera se puede editar libremente, y el nombre de
+la tool es justo el campo que alguien querria cambiar.
+
+### D-046 · El id de un evento se registra despues de manejarlo, no al recibirlo
+**Contexto:** `SeenEvents` marcaba al recibir. Si el handler fallaba, la redelivery de
+JetStream se leia como duplicado y se descartaba: **cualquier fallo perdia el evento**, y la
+entrega at-least-once se volvia at-most-once en silencio.
+**Decision:** registrar tras el exito del handler. Lo encontro el test de integracion
+contra NATS real; el bus en memoria no podia verlo.
+
+### D-047 · El DLQ vive fuera del arbol `peak.`
+**Contexto:** `PEAK` cubria `peak.>` y `PEAK_DLQ` cubria `peak.dlq.>`, un subconjunto.
+JetStream rechaza asuntos solapados, asi que `connect()` fallaba contra cualquier broker
+limpio.
+**Decision:** `peak-dlq.>`. Otro fallo que solo aparece contra el broker real.
+
+### D-048 · El juez califica con la clasificacion acumulada de la tarea
+**Razon:** el juez lee la respuesta, que arrastra el maximo acumulado. Enrutar su llamada
+por ese valor es lo que impide que una respuesta C4 se mande a un modelo externo para
+calificarla —un agujero en la invariante de soberania disfrazado de control de calidad.
+
+### D-049 · Una fuga en la salida escala, no reintenta
+**Razon:** la misma generacion volveria a filtrar. Un fallo de `safety` tampoco es un
+problema de prompting; `groundedness` a menudo si, y por eso ese va a `replan`.
+
+### D-050 · `QualityHook` devuelve un veredicto, no un diccionario de puntuaciones
+**Contexto:** F1 dejo "valor negativo = falla", y `replan` no lo producia nadie pese a estar
+en el tipo `Verdict`.
+**Decision:** `QualityVerdict` con veredicto, puntuaciones y razones. Los umbrales viven con
+el juez, donde el perfil los configura; la puerta solo aplica el presupuesto de reintentos y
+el enrutado. Un `retry` conserva el plan; un `replan` lo descarta, porque conservarlo
+reproduciria la respuesta rechazada.
+
+### D-051 · Un veredicto reanuda desde el checkpoint, no re-ejecuta la tarea
+**Razon:** el veredicto llega segundos o minutos despues, por un bus, posiblemente en otro
+proceso. Re-ejecutar repetiria cada tool call que la tarea ya hizo. El mecanismo: escribir
+el veredicto en el estado checkpointado como si lo hubiera producido la puerta de calidad, y
+continuar. La arista condicional del grafo hace el resto, asi que no hay una segunda copia
+del enrutado de reintentos.
+
+### Cierre de F6
+
+**Construido:** contrato de decisiones con razones obligatorias, `LocalPdp` + `OpaPdp` +
+`CachingPdp` con fail-closed no configurable para C3/C4 y A2+, cinco paquetes Rego con
+`default deny`, motor DLP bidireccional apoyado en el scrubber existente, `EventBus` con
+NATS JetStream y bus en proceso, CloudEvents versionados, juez local con checks
+deterministas y rubrica, agregador que reanuda desde checkpoint, y ledger hash-chain con
+`verify-ledger` y export por tenant.
+
+**Verificado:** los cuatro criterios de salida, cada uno sobre el grafo ensamblado —C4 no
+sale, A2 espera, `retry` reanuda desde el checkpoint (tambien con el veredicto llegando por
+el bus), y la cadena verifica y detecta tanto una edicion como un borrado.
+
+**Tres bugs reales**, ninguno visible desde una prueba unitaria: un paquete Rego que
+permitia un input vacio, dos streams de JetStream solapados que rompian `connect()`, y una
+deduplicacion que anulaba los reintentos y perdia el evento para siempre.
+
+578 tests unit + policy, 28 de integracion. Cobertura global 83.0 % sin Docker, 85.3 % con
+la suite de integracion.
+
+**Siguiente:** F7 · observabilidad y evals.

@@ -9,7 +9,7 @@ Reglas permanentes:
 - Un commit por unidad lógica; actualiza docs/memory/DECISIONS_LOG.md al cerrar cada fase.
 - Ante ambigüedad: decide, registra un ADR y continúa. No esperes confirmación.
 - En la Fase 0 expande este archivo según ordena el prompt, pero NUNCA borres este bloque de misión.
-- Estado actual: Fase 6 — Gobernanza, ciclo Agregador/Judge y evidencia (F0–F5 cerradas)
+- Estado actual: Fase 7 — Observabilidad y evals (F0–F6 cerradas)
 
 ---
 

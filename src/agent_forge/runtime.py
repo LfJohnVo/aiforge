@@ -35,8 +35,17 @@ from agent_forge.core.planner import Planner
 from agent_forge.core.prompts import PromptRegistry
 from agent_forge.core.router import IntentRouter
 from agent_forge.core.subgraphs.base import load_subgraph
+from agent_forge.events import (
+    Aggregator,
+    EventBus,
+    EvidenceLedger,
+    LocalJudge,
+    build_bus,
+    build_ledger,
+)
 from agent_forge.gateway.litellm_client import GovernedGateway, LiteLLMTransport
 from agent_forge.gateway.model_policy import ModelPolicy
+from agent_forge.governance import GovernanceService, build_governance
 from agent_forge.knowledge import KnowledgeService, build_knowledge
 from agent_forge.memory import MemoryManager, Scrubber, build_memory
 from agent_forge.observability.logging import configure_logging, get_logger
@@ -88,6 +97,9 @@ class Settings:
     # for the rest, and it stays a list rather than a wildcard because the check it
     # feeds is what stops DNS rebinding.
     mcp_allowed_hosts: tuple[str, ...] = ()
+    # Where the evidence chain is written. A local path on purpose: the chain is the
+    # cell's own record and must survive the central ledger being unreachable.
+    ledger_path: str = "./var/ledger"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -113,6 +125,7 @@ class Settings:
             mcp_allowed_hosts=tuple(
                 h.strip() for h in source.get("MCP_ALLOWED_HOSTS", "").split(",") if h.strip()
             ),
+            ledger_path=source.get("LEDGER_PATH", "./var/ledger"),
         )
 
     @property
@@ -190,6 +203,10 @@ class Runtime:
     knowledge: KnowledgeService
     connectors: ConnectorRegistry
     tasks: TaskRunner
+    governance: GovernanceService
+    bus: EventBus
+    ledger: EvidenceLedger
+    aggregator: Aggregator
     channel_settings: ChannelSettings
     approvals: ApprovalStore
     approval_policy: ApprovalPolicy
@@ -208,6 +225,59 @@ class Runtime:
         await self.memory.store.aclose()
         await self.knowledge.aclose()
         await self.connectors.aclose()
+        await self.governance.aclose()
+        await self.bus.aclose()
+
+
+def _resume_hook(graph: Any, tasks: TaskRunner, instance: str) -> Any:
+    """Build the callback the aggregator uses to act on a retry or replan verdict.
+
+    Resumes from the checkpoint rather than re-running the task. The verdict arrives
+    later, over a bus, quite possibly in a different process; re-running from scratch
+    would repeat every tool call the task already made.
+
+    The mechanism: write the verdict into the checkpointed state *as if* the quality gate
+    had produced it, then continue. The graph's own conditional edge does the rest, which
+    is why there is no second copy of the retry routing here.
+    """
+
+    async def resume(task_id: str, verdict: str, reasons: tuple[str, ...]) -> None:
+        from agent_forge.core.checkpointer import namespaced_thread_id
+
+        record = await _find_task(tasks, task_id)
+        if record is None:
+            log.warning("resume.unknown_task", task_id=task_id)
+            return
+
+        config = {
+            "configurable": {
+                "thread_id": namespaced_thread_id(record.tenant_id, instance, record.thread_id)
+            }
+        }
+        update: dict[str, Any] = {
+            "verdict": verdict,
+            "scratchpad": {"judge_feedback": "; ".join(reasons) or f"veredicto {verdict}"},
+        }
+        if verdict == "replan":
+            update["plan"] = []
+        await graph.aupdate_state(config, update, as_node="quality_gate")
+        await graph.ainvoke(None, config)
+        log.info("resume.done", task_id=task_id, verdict=verdict)
+
+    return resume
+
+
+async def _find_task(tasks: TaskRunner, task_id: str) -> Any:
+    """A verdict names a task, not a tenant, so the store is searched for the id."""
+    store = tasks.store
+    getter = getattr(store, "find", None)
+    if getter is not None:  # pragma: no cover - for a store that can look up by id alone
+        return await getter(task_id)
+    records = getattr(store, "_records", {})
+    for (_, candidate), record in records.items():
+        if candidate == task_id:
+            return record
+    return None
 
 
 def check_capabilities(profile: AgentProfile, *, strict: bool) -> dict[str, bool]:
@@ -320,6 +390,35 @@ async def build_runtime(
         ],
     )
 
+    # Governance and evidence come before the graph: the gate hook and the judge are
+    # both dependencies of it, and the ledger has to exist before the first decision it
+    # is meant to record.
+    bus = build_bus(profile.events.fabric_url, source=profile.identity.agent_name)
+    stack.push_async_callback(bus.aclose)
+    ledger = build_ledger(settings.ledger_path, bus=bus, source=profile.identity.agent_name)
+
+    async def record(action: str, actor: str, payload: dict[str, Any]) -> None:
+        await ledger.record(
+            action,
+            actor,  # type: ignore[arg-type]
+            payload,
+            tenant_id=str(payload.get("tenant_id") or profile.identity.tenant_id),
+            metadata={"task_id": payload.get("task_id", "")},
+        )
+
+    governance = build_governance(profile, ledger=record)
+    judge = (
+        LocalJudge(
+            gateway=gateway,
+            model=profile.models.quality,
+            groundedness_threshold=profile.events.judge.thresholds.groundedness,
+            safety_threshold=profile.events.judge.thresholds.safety,
+            scan_answer=governance.scan_answer,
+        )
+        if profile.events.judge.mode == "local"
+        else None
+    )
+
     deps = GraphDeps(
         subgraph=subgraph,
         prompts=prompts,
@@ -335,6 +434,8 @@ async def build_runtime(
         memory=memory,
         knowledge=knowledge,
         tool_executor=connectors.executor(context_from_state),
+        governance=governance.gate,
+        quality=judge,
     )
 
     checkpointer = await stack.enter_async_context(
@@ -377,6 +478,14 @@ async def build_runtime(
         area=profile.identity.area,
     )
 
+    aggregator = Aggregator(
+        bus=bus,
+        source=profile.identity.agent_name,
+        tenant_id=profile.identity.tenant_id,
+        resume=_resume_hook(graph, tasks, settings.instance),
+        ledger=ledger,
+    )
+
     runtime = Runtime(
         settings=settings,
         profile=profile,
@@ -390,6 +499,10 @@ async def build_runtime(
         knowledge=knowledge,
         connectors=connectors,
         tasks=tasks,
+        governance=governance,
+        bus=bus,
+        ledger=ledger,
+        aggregator=aggregator,
         channel_settings=ChannelSettings.from_env(dict(source)),
         approvals=InMemoryApprovalStore(),
         approval_policy=ApprovalPolicy(

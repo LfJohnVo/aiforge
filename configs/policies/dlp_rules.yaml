@@ -1,0 +1,122 @@
+# Reglas del motor DLP propio (ADR-006).
+#
+# No son Rego: se evaluan en el camino caliente de cada mensaje, dentro y fuera, y deben
+# funcionar sin OPA en marcha. Rego decide sobre hechos ya compuestos; esto inspecciona
+# texto.
+#
+# La deteccion de PII **no** esta aqui: la aporta `memory/scrubbing.py`, que ya tiene
+# regex con checksum para tarjeta, IBAN, RFC, CURP y NIF, y Presidio opcional encima.
+# Duplicarla daria dos detectores que se desincronizan.
+#
+# Campos de una regla:
+#   id          identificador estable; acaba en el ledger y en el mensaje al usuario
+#   description que detecta, en una linea
+#   pattern     expresion regular Python, evaluada sin distinguir mayusculas
+#   severity    low | medium | high | critical
+#   action      block | redact | flag
+#   direction   input | output | both
+#
+# Sobre `action`:
+#   block   corta la peticion. Reservado a lo que no debe procesarse en absoluto.
+#   redact  sustituye la coincidencia por [ID] y continua.
+#   flag    registra y continua. Para señales que por si solas no prueban nada.
+
+version: 1
+
+rules:
+  # ---------------------------------------------------------------- inyeccion
+  - id: prompt_injection_override
+    description: Intento de anular las instrucciones del sistema
+    pattern: '(?:ignora|olvida|descarta)\s+(?:todas?\s+)?(?:las\s+)?(?:instrucciones|reglas|ordenes)\s+(?:anteriores|previas|del\s+sistema)|ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions|disregard\s+(?:all\s+)?(?:previous|prior)\s+(?:instructions|rules)'
+    severity: high
+    action: block
+    direction: input
+
+  - id: prompt_injection_role
+    description: Intento de reasignar el rol del sistema desde el mensaje del usuario
+    pattern: '(?:^|\n)\s*(?:system|sistema)\s*[:>]\s*(?:eres|you\s+are|act\s+as|actua\s+como)|<\|?(?:im_start|system)\|?>'
+    severity: high
+    action: block
+    direction: input
+
+  - id: prompt_injection_exfiltration
+    description: Peticion de revelar el prompt de sistema o la configuracion
+    pattern: '(?:reveal|muestra|imprime|repite|print|show)\s+(?:me\s+)?(?:your|tu|el|the)\s+(?:system\s+)?(?:prompt|instrucciones\s+de\s+sistema|configuracion\s+interna|initial\s+instructions)'
+    severity: medium
+    action: flag
+    direction: input
+
+  - id: jailbreak_persona
+    description: Personas conocidas de evasion de guardarrailes
+    pattern: '\b(?:DAN|do\s+anything\s+now|developer\s+mode|modo\s+desarrollador|jailbreak)\b'
+    severity: high
+    action: block
+    direction: input
+
+  # ------------------------------------------------------------------ secretos
+  # Salen en ambas direcciones: un secreto en la entrada no debe llegar al modelo, y uno
+  # en la salida no debe llegar al usuario. El de salida es el peor de los dos, porque
+  # significa que el secreto ya estaba en el conocimiento del tenant.
+  - id: secret_private_key
+    description: Bloque de clave privada PEM
+    pattern: '-----BEGIN\s+(?:RSA|EC|OPENSSH|PGP|DSA)?\s*PRIVATE\s+KEY-----'
+    severity: critical
+    action: block
+    direction: both
+
+  - id: secret_aws_access_key
+    description: Access key id de AWS
+    pattern: '\b(?:AKIA|ASIA)[0-9A-Z]{16}\b'
+    severity: critical
+    action: redact
+    direction: both
+
+  - id: secret_bearer_token
+    description: Token portador de aspecto largo en una cabecera
+    pattern: '\b(?:authorization\s*:\s*)?bearer\s+[A-Za-z0-9\-._~+/]{32,}={0,2}'
+    severity: high
+    action: redact
+    direction: both
+
+  - id: secret_openai_key
+    description: Clave de API con prefijo sk-
+    pattern: '\bsk-(?:proj-|ant-|live-)?[A-Za-z0-9_-]{20,}\b'
+    severity: critical
+    action: redact
+    direction: both
+
+  - id: secret_slack_token
+    description: Token de Slack
+    pattern: '\bxox[baprs]-[A-Za-z0-9-]{10,}\b'
+    severity: critical
+    action: redact
+    direction: both
+
+  - id: secret_generic_assignment
+    description: Contrasena o secreto asignado en linea
+    pattern: '\b(?:password|passwd|contrasena|secret|api[_-]?key|token)\s*[=:]\s*["'']?[^\s"'',;]{8,}'
+    severity: medium
+    action: redact
+    direction: both
+
+  - id: secret_postgres_dsn
+    description: Cadena de conexion con credenciales embebidas
+    pattern: '\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://[^\s:/@]+:[^\s@]+@'
+    severity: critical
+    action: redact
+    direction: both
+
+  # -------------------------------------------------------------------- salida
+  - id: output_internal_path
+    description: Ruta interna del contenedor filtrada en la respuesta
+    pattern: '(?:/(?:app|srv|opt)/agent_forge|/var/ledger|/data/[a-z]+)/[\w./-]+'
+    severity: low
+    action: redact
+    direction: output
+
+  - id: output_stack_trace
+    description: Traza de excepcion en una respuesta al usuario
+    pattern: 'Traceback \(most recent call last\)|File "[^"]+", line \d+, in '
+    severity: medium
+    action: redact
+    direction: output

@@ -13,7 +13,7 @@ from langgraph.types import Command
 
 from agent_forge.core.autonomy import AutonomyLevel, AutonomyMap
 from agent_forge.core.classification import Classification
-from agent_forge.core.graph import GateOutcome, build_graph, identity_gate
+from agent_forge.core.graph import GateOutcome, QualityVerdict, build_graph, identity_gate
 from agent_forge.core.state import AgentState, Citation
 from agent_forge.core.subgraphs.base import ToolDescriptor
 from agent_forge.core.subgraphs.it_support import ItSupportSubgraph
@@ -269,11 +269,11 @@ async def test_missing_connector_registry_is_reported_not_faked() -> None:
 async def test_failing_judge_replans_then_escalates_when_out_of_retries() -> None:
     calls = 0
 
-    async def always_fail(state: AgentState) -> dict[str, float]:
+    async def always_fail(state: AgentState) -> QualityVerdict:
         nonlocal calls
         calls += 1
         del state
-        return {"groundedness": -1.0}
+        return QualityVerdict(verdict="retry", scores={"groundedness": 0.1})
 
     app = build_graph(make_deps(quality=always_fail, max_retries=1))
 
@@ -286,9 +286,9 @@ async def test_failing_judge_replans_then_escalates_when_out_of_retries() -> Non
 
 
 async def test_passing_judge_approves_without_replanning() -> None:
-    async def pass_all(state: AgentState) -> dict[str, float]:
+    async def pass_all(state: AgentState) -> QualityVerdict:
         del state
-        return {"groundedness": 0.95}
+        return QualityVerdict(verdict="approve", scores={"groundedness": 0.95})
 
     app = build_graph(make_deps(quality=pass_all))
 

@@ -6,6 +6,18 @@ Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado
 ## [Unreleased]
 
 ### Added
+- **F6 · Gobernanza, ciclo Agregador/Judge y evidencia**: contrato `PolicyRequest`/
+  `PolicyVerdict` con razones obligatorias; `LocalPdp` (base Rego en proceso), `OpaPdp`
+  (PDP remoto) y `CachingPdp` con fail-closed **no configurable** para C3/C4 y A2+;
+  paquetes Rego `peak.{knowledge,tools,models,autonomy,common}` con `default deny`,
+  evaluados por OPA real y por su traduccion Python contra una sola tabla de casos;
+  motor DLP bidireccional (`configs/policies/dlp_rules.yaml`) apoyado en el scrubber de
+  PII existente; `EventBus` con NATS JetStream (consumidores durables, ack explicito,
+  DLQ, idempotencia por `event_id`) y bus en proceso; CloudEvents 1.0 versionados en el
+  *type*; juez local con checks deterministas y rubrica; agregador que publica
+  `task.result` y reanuda desde el checkpoint ante `retry`/`replan`; ledger hash-chain
+  append-only con `make verify-ledger` y export JSONL por tenant.
+- ADR-008 (la base de politicas existe dos veces y una tabla de casos las iguala).
 - **F5 · Upstream y canales**: ciclo de vida de tarea compartido por MCP y A2A
   (`submitted → working → input-required → completed | failed | canceled`), servidor MCP
   por streamable HTTP en `/mcp/` con `ask`, `run_task`, `get_status`, `search_knowledge`

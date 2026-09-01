@@ -5,17 +5,17 @@
 
 ## Resumen
 
-- Módulos Python: **114**
-- Líneas de código: **23529**
-- Clases: **221** · Funciones y métodos de nivel superior: **738**
-- Dependencias externas importadas directamente: **47**
+- Módulos Python: **130**
+- Líneas de código: **28369**
+- Clases: **264** · Funciones y métodos de nivel superior: **898**
+- Dependencias externas importadas directamente: **50**
 
 ## Dependencias entre paquetes
 
 ```mermaid
 flowchart LR
-  scripts["scripts<br/>1147 loc"]
-  src_agent_forge["src/agent_forge<br/>422 loc"]
+  scripts["scripts<br/>1227 loc"]
+  src_agent_forge["src/agent_forge<br/>535 loc"]
   src_agent_forge_api["src/agent_forge/api<br/>915 loc"]
   src_agent_forge_channels["src/agent_forge/channels<br/>101 loc"]
   src_agent_forge_channels_openai_api["src/agent_forge/channels/openai_api<br/>317 loc"]
@@ -27,11 +27,14 @@ flowchart LR
   src_agent_forge_connectors_mcp_client["src/agent_forge/connectors/mcp_client<br/>318 loc"]
   src_agent_forge_connectors_n8n["src/agent_forge/connectors/n8n<br/>272 loc"]
   src_agent_forge_connectors_openconnector["src/agent_forge/connectors/openconnector<br/>288 loc"]
-  src_agent_forge_core["src/agent_forge/core<br/>2202 loc"]
+  src_agent_forge_core["src/agent_forge/core<br/>2232 loc"]
   src_agent_forge_core_subgraphs["src/agent_forge/core/subgraphs<br/>216 loc"]
   src_agent_forge_core_subgraphs_generalist["src/agent_forge/core/subgraphs/generalist<br/>58 loc"]
   src_agent_forge_core_subgraphs_it_support["src/agent_forge/core/subgraphs/it_support<br/>159 loc"]
+  src_agent_forge_events["src/agent_forge/events<br/>1257 loc"]
+  src_agent_forge_events_schemas["src/agent_forge/events/schemas<br/>136 loc"]
   src_agent_forge_gateway["src/agent_forge/gateway<br/>696 loc"]
+  src_agent_forge_governance["src/agent_forge/governance<br/>995 loc"]
   src_agent_forge_knowledge["src/agent_forge/knowledge<br/>948 loc"]
   src_agent_forge_knowledge_cag["src/agent_forge/knowledge/cag<br/>137 loc"]
   src_agent_forge_knowledge_graphrag["src/agent_forge/knowledge/graphrag<br/>456 loc"]
@@ -45,29 +48,36 @@ flowchart LR
   src_agent_forge_upstream_a2a["src/agent_forge/upstream/a2a<br/>238 loc"]
   src_agent_forge_upstream_mcp_server["src/agent_forge/upstream/mcp_server<br/>176 loc"]
   src_agent_forge_upstream_openapi["src/agent_forge/upstream/openapi<br/>170 loc"]
-  tests["tests<br/>464 loc"]
-  tests_integration["tests/integration<br/>529 loc"]
-  tests_unit["tests/unit<br/>5287 loc"]
+  tests["tests<br/>488 loc"]
+  tests_integration["tests/integration<br/>824 loc"]
+  tests_policies["tests/policies<br/>490 loc"]
+  tests_unit["tests/unit<br/>6710 loc"]
   tests_unit_connectors["tests/unit/connectors<br/>1417 loc"]
-  tests_unit -->|38| src_agent_forge_core
-  tests_unit -->|15| tests
+  tests_unit -->|47| src_agent_forge_core
+  tests_unit -->|17| tests
   tests_unit_connectors -->|11| src_agent_forge_core
   tests -->|10| src_agent_forge_core
   src_agent_forge_connectors -->|9| src_agent_forge_core
+  src_agent_forge_governance -->|9| src_agent_forge_core
   src_agent_forge_memory -->|9| src_agent_forge_core
   src_agent_forge_api -->|8| src_agent_forge_core
   src_agent_forge_knowledge -->|8| src_agent_forge_core
   src_agent_forge_memory -->|7| src_agent_forge_observability
   src_agent_forge -->|7| src_agent_forge_core
   tests_integration -->|7| src_agent_forge_core
+  tests_unit -->|7| src_agent_forge_governance
+  src_agent_forge_events -->|6| src_agent_forge_observability
   src_agent_forge_knowledge_rag -->|6| src_agent_forge_core
   tests_unit_connectors -->|6| src_agent_forge_connectors
   src_agent_forge_core -->|5| src_agent_forge_observability
   src_agent_forge_core_subgraphs -->|5| src_agent_forge_core
+  src_agent_forge_events -->|5| src_agent_forge_events_schemas
   src_agent_forge_api -->|4| src_agent_forge_observability
   src_agent_forge_api -->|4| src_agent_forge
   src_agent_forge_gateway -->|4| src_agent_forge_core
   src_agent_forge_knowledge_rag -->|4| src_agent_forge_knowledge
+  tests_unit -->|4| src_agent_forge_core_subgraphs
+  tests_unit -->|4| src_agent_forge_events
   tests_unit -->|4| src_agent_forge_gateway
   tests_unit -->|4| src_agent_forge_knowledge_rag
   src_agent_forge_channels_openai_api -->|3| src_agent_forge_core
@@ -79,19 +89,21 @@ flowchart LR
   src_agent_forge_connectors_n8n -->|3| src_agent_forge_core
   src_agent_forge_connectors_openconnector -->|3| src_agent_forge_core
   src_agent_forge_core -->|3| src_agent_forge_gateway
+  src_agent_forge_governance -->|3| src_agent_forge_observability
   src_agent_forge_knowledge -->|3| src_agent_forge_observability
   src_agent_forge_knowledge_rag -->|3| src_agent_forge_observability
   src_agent_forge_profile -->|3| src_agent_forge_core
   src_agent_forge_upstream_mcp_server -->|3| src_agent_forge_core
+  tests_policies -->|3| src_agent_forge_governance
   tests_unit -->|3| src_agent_forge_api
   tests_unit -->|3| src_agent_forge_core_subgraphs_it_support
-  tests_unit -->|3| src_agent_forge_core_subgraphs
   tests_unit -->|3| src_agent_forge_knowledge
   tests_unit -->|3| src_agent_forge_memory
   scripts -->|2| src_agent_forge_observability
   src_agent_forge_api -->|2| src_agent_forge_channels_openai_api
   src_agent_forge_channels_websocket -->|2| src_agent_forge_core
   src_agent_forge_core -->|2| src_agent_forge_core_subgraphs
+  src_agent_forge_events -->|2| src_agent_forge_core
   src_agent_forge_knowledge_cag -->|2| src_agent_forge_knowledge
   src_agent_forge_knowledge_graphrag -->|2| src_agent_forge_knowledge
   src_agent_forge_knowledge_ingestion -->|2| src_agent_forge_knowledge
@@ -104,6 +116,8 @@ flowchart LR
   src_agent_forge_upstream_a2a -->|2| src_agent_forge_core
   src_agent_forge_upstream -->|2| src_agent_forge_core
   tests -->|2| src_agent_forge_core_subgraphs
+  tests_integration -->|2| src_agent_forge_events
+  tests_policies -->|2| src_agent_forge_core
   tests -->|2| src_agent_forge_gateway
   tests_unit -->|2| src_agent_forge_connectors
   tests_unit -->|2| src_agent_forge_knowledge_graphrag
@@ -111,6 +125,7 @@ flowchart LR
   scripts -->|1| src_agent_forge_core
   scripts -->|1| src_agent_forge_knowledge
   scripts -->|1| src_agent_forge_profile
+  scripts -->|1| src_agent_forge_events
   src_agent_forge_api -->|1| src_agent_forge_knowledge
   src_agent_forge_api -->|1| src_agent_forge_channels
   src_agent_forge_api -->|1| src_agent_forge_profile
@@ -149,7 +164,9 @@ flowchart LR
   src_agent_forge_core_subgraphs_it_support -->|1| src_agent_forge_core
   src_agent_forge_core_subgraphs_it_support -->|1| src_agent_forge_core_subgraphs
   src_agent_forge_core_subgraphs_it_support -->|1| src_agent_forge_observability
+  src_agent_forge_events -->|1| src_agent_forge_governance
   src_agent_forge_gateway -->|1| src_agent_forge_observability
+  src_agent_forge_governance -->|1| src_agent_forge_memory
   src_agent_forge_knowledge -->|1| src_agent_forge_knowledge_cag
   src_agent_forge_knowledge -->|1| src_agent_forge_knowledge_graphrag
   src_agent_forge_knowledge -->|1| src_agent_forge_knowledge_ingestion
@@ -173,6 +190,8 @@ flowchart LR
   src_agent_forge -->|1| src_agent_forge_connectors_mcp_client
   src_agent_forge -->|1| src_agent_forge_connectors_n8n
   src_agent_forge -->|1| src_agent_forge_core_subgraphs
+  src_agent_forge -->|1| src_agent_forge_events
+  src_agent_forge -->|1| src_agent_forge_governance
   src_agent_forge -->|1| src_agent_forge_knowledge
   src_agent_forge -->|1| src_agent_forge_memory
   src_agent_forge -->|1| src_agent_forge_observability
@@ -188,6 +207,7 @@ flowchart LR
   tests_integration -->|1| src_agent_forge_core_subgraphs
   tests_integration -->|1| src_agent_forge_core_subgraphs_it_support
   tests_integration -->|1| tests
+  tests_integration -->|1| src_agent_forge_events_schemas
   tests_integration -->|1| src_agent_forge_knowledge
   tests_integration -->|1| src_agent_forge_knowledge_rag
   tests_integration -->|1| src_agent_forge_memory
@@ -219,13 +239,14 @@ flowchart LR
 | [`new_connector.py`](../scripts/new_connector.py) | Generate a new connector: module, entry point, contract test and documentation row. | 312 | `generate`, `_register_entry_point`, `_append_doc_row`, `main` |
 | [`repo_graph.py`](../scripts/repo_graph.py) | Build a knowledge graph of this repository from its AST. | 365 | `Symbol`, `Module`, `_decorator_name`, `_first_line`, `parse_module`, `discover` (+9) |
 | [`seed.py`](../scripts/seed.py) | Seed a demo corpus so a fresh cell has something to answer from. | 118 | `SeedDocument`, `seed`, `main` |
+| [`verify_ledger.py`](../scripts/verify_ledger.py) | Validate the evidence hash chain. ``make verify-ledger``. | 80 | `main`, `_export` |
 
 ### `src/agent_forge`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../src/agent_forge/__init__.py) | Agent Forge - reusable enterprise agent cell for the PEAK architecture. | 7 | — |
-| [`runtime.py`](../src/agent_forge/runtime.py) | Composition root: turns a profile plus an environment into a running cell. | 415 | `installed_capabilities`, `Settings`, `TeamsSettings`, `SlackSettings`, `ChannelSettings`, `_group_map` (+4) |
+| [`runtime.py`](../src/agent_forge/runtime.py) | Composition root: turns a profile plus an environment into a running cell. | 528 | `installed_capabilities`, `Settings`, `TeamsSettings`, `SlackSettings`, `ChannelSettings`, `_group_map` (+6) |
 
 ### `src/agent_forge/analytics`
 
@@ -266,7 +287,7 @@ flowchart LR
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/channels/openwebui/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/channels/openwebui/__init__.py) | OpenWebUI channel. | 7 | — |
 | [`pipe.py`](../src/agent_forge/channels/openwebui/pipe.py) | OpenWebUI pipe for an Agent Forge cell. | 91 | `Pipe` |
 
 ### `src/agent_forge/channels/slack`
@@ -329,7 +350,7 @@ flowchart LR
 | [`checkpointer.py`](../src/agent_forge/core/checkpointer.py) | Checkpointer selection. | 89 | `CheckpointerError`, `namespaced_thread_id`, `open_checkpointer` |
 | [`classification.py`](../src/agent_forge/core/classification.py) | Data classification C0-C4. | 93 | `Classification`, `accumulate`, `is_within`, `coerce_payload` |
 | [`errors.py`](../src/agent_forge/core/errors.py) | Domain errors. | 138 | `AgentForgeError`, `ProfileError`, `CapabilityUnavailableError`, `AuthenticationError`, `AuthorizationError`, `PolicyDeniedError` (+7) |
-| [`graph.py`](../src/agent_forge/core/graph.py) | The agentic graph. | 751 | `GateOutcome`, `identity_gate`, `GraphDeps`, `_digest`, `_intake`, `_governance_gate` (+17) |
+| [`graph.py`](../src/agent_forge/core/graph.py) | The agentic graph. | 781 | `GateOutcome`, `QualityVerdict`, `identity_gate`, `GraphDeps`, `_digest`, `_intake` (+18) |
 | [`hitl.py`](../src/agent_forge/core/hitl.py) | Human in the loop. | 228 | `Approver`, `ApprovalPolicy`, `PendingApproval`, `ApprovalStore`, `InMemoryApprovalStore`, `build_request` (+4) |
 | [`planner.py`](../src/agent_forge/core/planner.py) | Planner: decomposes a request into steps. | 178 | `PlanRequest`, `Planner`, `parse_plan`, `_drop_unknown_tools`, `_single_step`, `_with_feedback` (+1) |
 | [`prompts.py`](../src/agent_forge/core/prompts.py) | Versioned prompt registry. | 158 | `PromptError`, `Prompt`, `PromptRegistry`, `_load_prompt` |
@@ -359,13 +380,18 @@ flowchart LR
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/events/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/events/__init__.py) | Event fabric: CloudEvents over a swappable bus, plus the evidence chain. | 85 | `build_bus`, `build_ledger` |
+| [`aggregator.py`](../src/agent_forge/events/aggregator.py) | Publishing task results and acting on judge verdicts. | 150 | `result_event`, `_status_of`, `Aggregator` |
+| [`bus.py`](../src/agent_forge/events/bus.py) | The event bus behind a Protocol, so the broker can be swapped without touching logic. | 184 | `subject_for`, `SeenEvents`, `EventBus`, `_Subscription`, `InMemoryBus`, `_matches` |
+| [`evidence.py`](../src/agent_forge/events/evidence.py) | Append-only evidence ledger with a hash chain. | 386 | `ChainError`, `digest`, `LedgerRecord`, `LedgerSink`, `JsonlSink`, `_append_line` (+6) |
+| [`judge.py`](../src/agent_forge/events/judge.py) | The local judge: LLM-as-judge with rubrics, plus deterministic checks it cannot skip. | 228 | `Rubric`, `coverage_of`, `LocalJudge`, `_looks_like_a_refusal`, `_parse_scores` |
+| [`nats_impl.py`](../src/agent_forge/events/nats_impl.py) | NATS JetStream implementation of the event bus. | 224 | `NatsBus`, `_durable_name`, `_delivery_count`, `_safe` |
 
 ### `src/agent_forge/events/schemas`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/events/schemas/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/events/schemas/__init__.py) | Versioned CloudEvents payloads (Appendix A of the specification). | 136 | `_Data`, `TaskResultData`, `JudgeVerdictData`, `EvidenceRecordData`, `CloudEvent`, `event_type` |
 
 ### `src/agent_forge/gateway`
 
@@ -379,7 +405,10 @@ flowchart LR
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/governance/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/governance/__init__.py) | The governance layer the graph calls. | 242 | `GovernanceService`, `_ceiling_for`, `_dlp_reasons`, `build_governance` |
+| [`decisions.py`](../src/agent_forge/governance/decisions.py) | The request and verdict shapes every policy decision travels in. | 201 | `PolicyKind`, `_Model`, `PolicyRequest`, `PolicyVerdict`, `combine`, `_parse` |
+| [`dlp.py`](../src/agent_forge/governance/dlp.py) | DLP and prompt firewall, on the way in and on the way out. | 225 | `Severity`, `DlpRule`, `DlpMatch`, `DlpResult`, `load_rules`, `DlpEngine` |
+| [`pdp.py`](../src/agent_forge/governance/pdp.py) | Policy decision points: the local Rego base in Python, and the remote OPA overlay. | 327 | `PolicyDecisionPoint`, `LocalPdp`, `_Entry`, `OpaPdp`, `CachingPdp` |
 
 ### `src/agent_forge/knowledge`
 
@@ -480,9 +509,9 @@ flowchart LR
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../tests/__init__.py) | Agent Forge test suite. | 2 | — |
-| [`cell.py`](../tests/cell.py) | Builders for a whole cell: a real Runtime whose only fakes are at the boundaries. | 209 | `cell_env`, `empty_knowledge`, `_with_surfaces`, `make_runtime`, `make_app` |
+| [`cell.py`](../tests/cell.py) | Builders for a whole cell: a real Runtime whose only fakes are at the boundaries. | 226 | `cell_env`, `empty_knowledge`, `_with_surfaces`, `make_runtime`, `make_app` |
 | [`conftest.py`](../tests/conftest.py) | Shared pytest fixtures. | 69 | `repo_root`, `sample_package`, `pytest_asyncio_loop_factories` |
-| [`support.py`](../tests/support.py) | Test doubles that satisfy the same Protocols as the production implementations. | 184 | `FakeTransport`, `FakeRetrievalResult`, `fake_retriever`, `make_policy`, `make_gateway`, `make_prompts` (+2) |
+| [`support.py`](../tests/support.py) | Test doubles that satisfy the same Protocols as the production implementations. | 191 | `FakeTransport`, `FakeRetrievalResult`, `fake_retriever`, `make_policy`, `make_gateway`, `make_prompts` (+2) |
 
 ### `tests/e2e`
 
@@ -496,6 +525,7 @@ flowchart LR
 |---|---|---:|---|
 | [`__init__.py`](../tests/integration/__init__.py) | Agent Forge test suite. | 2 | — |
 | [`test_checkpoint_resume.py`](../tests/integration/test_checkpoint_resume.py) | Durable resume against a real Postgres checkpointer. | 136 | `postgres_dsn`, `saver`, `test_task_resumes_across_process_objects`, `test_state_survives_and_is_readable_after_the_pause`, `test_two_tenants_never_share_a_thread` |
+| [`test_events_nats.py`](../tests/integration/test_events_nats.py) | The event bus against a real NATS JetStream. | 295 | `nats_url`, `tenant`, `bus`, `_verdict`, `test_the_streams_are_declared_on_connect`, `test_a_published_verdict_reaches_its_subscriber` (+10) |
 | [`test_knowledge_qdrant.py`](../tests/integration/test_knowledge_qdrant.py) | The access filter against a real Qdrant. | 230 | `chunk`, `qdrant_url`, `store`, `_query`, `test_the_analyst_sees_only_what_their_group_and_ceiling_allow`, `test_group_and_user_acls_grant_independently` (+7) |
 | [`test_memory_redis.py`](../tests/integration/test_memory_redis.py) | The memory contract against a real Redis. | 161 | `redis_url`, `store`, `test_round_trip_and_delete`, `test_ttl_is_applied`, `test_scan_is_scoped_to_the_pattern`, `test_health_is_true_against_a_live_server` (+4) |
 
@@ -504,6 +534,9 @@ flowchart LR
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../tests/policies/__init__.py) | Agent Forge test suite. | 2 | — |
+| [`cases.py`](../tests/policies/cases.py) | One table of policy cases, evaluated twice. | 277 | `Case`, `_req`, `case_ids` |
+| [`test_local_pdp.py`](../tests/policies/test_local_pdp.py) | The shared case table, evaluated by the in-process policy engine. | 44 | `test_local_policy_matches_the_case_table`, `_assert_reason`, `test_every_decision_carries_at_least_one_reason` |
+| [`test_rego.py`](../tests/policies/test_rego.py) | The same case table, evaluated by the real Rego under OPA. | 167 | `_runner`, `_policy_path`, `_evaluate`, `test_the_policy_bundle_compiles`, `test_rego_matches_the_case_table`, `test_an_empty_input_document_is_denied_by_every_package` (+1) |
 
 ### `tests/unit`
 
@@ -512,10 +545,13 @@ flowchart LR
 | [`__init__.py`](../tests/unit/__init__.py) | Agent Forge test suite. | 2 | — |
 | [`test_admin_approvals.py`](../tests/unit/test_admin_approvals.py) | The HITL loop over HTTP: pause, queue, decide, resume. | 302 | `_runtime_with_a2`, `_pause_a_task`, `test_approving_resumes_the_task_and_runs_the_action`, `test_rejecting_resumes_without_running_the_action`, `test_an_approver_outside_the_group_cannot_decide`, `test_unknown_request_id_is_a_404` (+16) |
 | [`test_api.py`](../tests/unit/test_api.py) | The HTTP surface: auth, the OpenAI-compatible channel, admin and health. | 295 | `runtime`, `app`, `client`, `_lifespan`, `test_parse_api_keys_maps_secret_to_tenant`, `test_parse_api_keys_rejects_malformed_entries` (+14) |
-| [`test_channels.py`](../tests/unit/test_channels.py) | The conversational channels: WebSocket, Teams, Slack and OpenWebUI. | 426 | `_cell`, `test_a_socket_without_a_credential_is_closed_before_it_becomes_a_session`, `test_a_socket_authenticated_by_query_parameter_receives_the_typed_events`, `test_a_malformed_frame_is_an_error_event_not_a_dropped_connection`, `_drain`, `_rsa_token` (+24) |
+| [`test_channels.py`](../tests/unit/test_channels.py) | The conversational channels: WebSocket, Teams, Slack and OpenWebUI. | 422 | `_cell`, `test_a_socket_without_a_credential_is_closed_before_it_becomes_a_session`, `test_a_socket_authenticated_by_query_parameter_receives_the_typed_events`, `test_a_malformed_frame_is_an_error_event_not_a_dropped_connection`, `_drain`, `_rsa_token` (+24) |
 | [`test_connectors_in_graph.py`](../tests/unit/test_connectors_in_graph.py) | Connectors as the graph uses them, and the generator that creates new ones. | 325 | `ToolCallingSubgraph`, `run`, `test_an_n8n_callback_lets_the_graph_finish`, `test_a_workflow_that_never_answers_does_not_claim_success`, `test_the_graph_offers_only_allowlisted_healthy_tools`, `test_a_builtin_tool_is_offered_without_an_allowlist_entry` (+6) |
 | [`test_docs_check.py`](../tests/unit/test_docs_check.py) | Tests for the documentation completeness gate. | 119 | `test_this_repository_passes_the_gate`, `test_missing_file_is_reported`, `test_stub_is_reported`, `test_placeholder_markers_are_rejected`, `test_missing_heading_is_reported`, `test_fewer_than_four_accepted_adrs_fails` (+6) |
 | [`test_docs_check_markers.py`](../tests/unit/test_docs_check_markers.py) | Regression tests for the two false positives the docs gate hit on its first run. | 73 | `_doc`, `test_spanish_word_todo_is_not_a_placeholder`, `test_uppercase_todo_in_prose_is_still_a_placeholder`, `test_marker_inside_inline_code_is_a_reference_not_a_marker`, `test_marker_inside_fenced_block_is_ignored`, `test_stripping_code_preserves_line_numbers` (+2) |
+| [`test_events.py`](../tests/unit/test_events.py) | The event fabric, the local judge, and the evidence chain. | 597 | `_escaped`, `_ledger_text`, `_state`, `test_the_tenant_is_part_of_the_subject_not_only_the_payload`, `test_dots_in_the_event_type_are_flattened`, `test_a_tenantless_event_still_gets_a_valid_subject` (+46) |
+| [`test_governance.py`](../tests/unit/test_governance.py) | Governance: the PDP client, the DLP engine, and the gate the graph calls. | 454 | `_request`, `test_an_overlay_can_forbid_what_the_base_allows`, `test_an_overlay_cannot_permit_what_the_base_forbids`, `test_combining_narrows_the_ceiling_and_raises_the_autonomy_requirement`, `test_combining_nothing_denies`, `_opa_response` (+35) |
+| [`test_governance_e2e.py`](../tests/unit/test_governance_e2e.py) | The phase's exit criteria, demonstrated through a real graph rather than a unit. | 376 | `_run`, `_governance`, `test_c4_content_never_reaches_an_external_backend`, `test_a_task_that_accumulates_c4_is_not_synthesised_externally`, `_SecretFindingSubgraph`, `test_the_governance_layer_refuses_a_c4_external_route` (+11) |
 | [`test_graph.py`](../tests/unit/test_graph.py) | The agentic graph: flow, classification accumulation, HITL and resume. | 368 | `run`, `test_end_to_end_produces_an_answer`, `test_retrieved_material_becomes_citations`, `test_retrieved_classification_raises_the_task_ceiling`, `test_tool_result_classification_is_folded_in`, `test_anonymous_requests_are_capped_at_c0_and_a0` (+12) |
 | [`test_knowledge.py`](../tests/unit/test_knowledge.py) | Knowledge: chunking, classification, retrieval and — above all — access control. | 696 | `make_chunk`, `test_short_text_is_one_chunk`, `test_long_text_splits_on_paragraphs_and_overlaps`, `test_a_giant_paragraph_never_splits_mid_word`, `test_chunks_inherit_the_documents_acl_and_classification`, `test_chunk_ids_are_stable_so_reingestion_replaces` (+39) |
 | [`test_knowledge_adapters.py`](../tests/unit/test_knowledge_adapters.py) | The knowledge adapters that talk to something: gateway, Graph, S3, Neo4j, Qdrant. | 511 | `EmbeddingTransport`, `test_gateway_embeddings_route_through_a_sovereign_backend`, `test_gateway_embeddings_batch_large_inputs`, `test_embed_query_returns_a_single_vector`, `test_a_gateway_outage_degrades_to_the_fallback_rather_than_failing`, `test_without_a_fallback_the_outage_propagates` (+27) |
@@ -540,4 +576,4 @@ flowchart LR
 
 ## Dependencias externas
 
-`__future__`, `abc`, `argparse`, `ast`, `asyncio`, `collections`, `contextlib`, `copy`, `coverage_gate`, `cryptography`, `dataclasses`, `datetime`, `docs_check`, `enum`, `fastapi`, `fnmatch`, `functools`, `hashlib`, `hmac`, `httpx`, `importlib`, `jinja2`, `json`, `jwt`, `langgraph`, `logging`, `math`, `mcp`, `networkx`, `os`, `pathlib`, `pydantic`, `pytest`, `re`, `repo_graph`, `requests`, `respx`, `socket`, `structlog`, `subprocess`, `sys`, `time`, `typing`, `unicodedata`, `uuid`, `xml`, `yaml`
+`__future__`, `abc`, `argparse`, `ast`, `asyncio`, `collections`, `contextlib`, `copy`, `coverage_gate`, `cryptography`, `dataclasses`, `datetime`, `docs_check`, `enum`, `fastapi`, `fnmatch`, `functools`, `hashlib`, `hmac`, `httpx`, `importlib`, `jinja2`, `json`, `jwt`, `langgraph`, `logging`, `math`, `mcp`, `nats`, `networkx`, `os`, `pathlib`, `pydantic`, `pytest`, `re`, `repo_graph`, `requests`, `respx`, `shutil`, `socket`, `structlog`, `subprocess`, `sys`, `tempfile`, `time`, `typing`, `unicodedata`, `uuid`, `xml`, `yaml`
