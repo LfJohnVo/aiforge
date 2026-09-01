@@ -57,6 +57,14 @@ docker compose -f deploy/compose/docker-compose.yml \
 
 Sin GPU, el perfil `serving` levanta Ollama.
 
+**Ollama no puede descargar modelos.** La red `backend` es `internal: true` —sin salida a
+internet, que es lo que impide que un almacén con datos del tenant tenga egress—, así que
+`ollama pull` falla resolviendo DNS. El volumen de modelos se siembra una vez desde un
+contenedor con salida; el procedimiento está en [`RUNBOOK.md`](RUNBOOK.md) §1.1.
+
+Y en CPU, los alias `local/fast` y `local/quality` apuntan a vLLM: sin GPU hay que usar
+`local/dev` o `local/tiny`. Ver RUNBOOK §1.2.
+
 ## 5. Varias células en el mismo host
 
 ```bash

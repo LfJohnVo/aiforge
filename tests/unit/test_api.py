@@ -184,6 +184,26 @@ async def test_models_endpoint_hides_real_backends(client: httpx.AsyncClient) ->
     assert ids == ["agent-forge"]
 
 
+async def test_models_endpoint_requires_a_credential(client: httpx.AsyncClient) -> None:
+    """It did not, and the reply names the tenant.
+
+    The old test only ever called it *with* a credential, so nothing noticed that an
+    anonymous caller could learn which tenant a cell belongs to. Every endpoint on this
+    channel authenticates; this one was the exception by accident, not by design.
+    """
+    response = await client.get("/v1/models")
+
+    assert response.status_code == 401
+
+
+async def test_the_models_reply_does_not_name_a_backend(client: httpx.AsyncClient) -> None:
+    """A client that could pick a backend would bypass classification-based routing."""
+    body = (await client.get("/v1/models", headers=AUTH)).text
+
+    for alias in ("local/fast", "local/quality", "anthropic", "azure", "ollama", "vllm"):
+        assert alias not in body, alias
+
+
 # ----------------------------------------------------------------------- health
 
 

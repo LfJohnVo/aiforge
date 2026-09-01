@@ -75,13 +75,23 @@ def resolve_identity(
 
 
 @router.get("/v1/models")
-async def list_models(runtime: Annotated[Runtime, Depends(get_runtime)]) -> dict[str, Any]:
+async def list_models(
+    runtime: Annotated[Runtime, Depends(get_runtime)],
+    identity: Annotated[Identity, Depends(resolve_identity)],
+) -> dict[str, Any]:
     """One entry: the cell itself.
 
     The real model aliases are deliberately not exposed. A client choosing a backend
     would bypass classification-based routing, which is the one decision no caller gets
     to make.
+
+    Authenticated, like every other endpoint on this channel. It was not, and the reply
+    carries the tenant id -- so an unauthenticated caller learned which tenant a cell
+    belongs to. Small, but `CHANNELS.md` says every channel authenticates and the Copilot
+    Studio spec declares `security: [{bearer: []}]` on this operation, so the code was the
+    one thing out of step. Every OpenAI-compatible client sends the key on this probe.
     """
+    del identity
     return {
         "object": "list",
         "data": [

@@ -49,8 +49,13 @@ x-agent-env: &agent-env
   N8N_URL: ${N8N_URL:-}
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
   OTEL_SERVICE_NAME: agent-forge
-  LEDGER_PATH: /var/lib/agent-forge/ledger
   AGENT_API_KEYS: ${AGENT_API_KEYS:-}
+  # Without this the A2A Agent Card advertises `url: "/a2a"` and the Copilot Studio
+  # spec advertises `servers: ["/"]` -- both relative, and a relative URL is useless
+  # to the remote orchestrator that is the entire audience for those two documents.
+  AGENT_PUBLIC_URL: ${AGENT_PUBLIC_URL:-}
+  MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
+  LEDGER_PATH: ${LEDGER_PATH:-/var/lib/agent-forge/ledger}
   AGENT_API_CORS_ORIGINS: ${AGENT_API_CORS_ORIGINS:-}
   OIDC_ISSUER: ${OIDC_ISSUER:-}
   OIDC_AUDIENCE: ${OIDC_AUDIENCE:-agent-forge}

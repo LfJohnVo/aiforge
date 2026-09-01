@@ -49,3 +49,5 @@ Thumbs.db
 
 # Node (promptfoo)
 node_modules/
+# Added by code-review-graph
+.code-review-graph/

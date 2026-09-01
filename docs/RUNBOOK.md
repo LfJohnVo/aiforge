@@ -25,6 +25,49 @@ raspa `/ready` y el endpoint del health_check extension. Nada depende de ellos c
 neo4j, nats) y además las **capacidades instaladas** (qué extras están presentes). Un
 `ready: false` con `postgres: down` es un problema distinto de `knowledge: unavailable`.
 
+### 1.1 Primer arranque: sembrar el modelo
+
+El perfil `serving` levanta Ollama en la red `backend`, que es **`internal: true`**: sin
+salida a internet, a propósito. La consecuencia sorprende y no perdona: **Ollama no puede
+descargar un modelo**. `ollama pull` falla con `dial tcp: lookup registry.ollama.ai ...
+server misbehaving`, y parece un problema de DNS del host cuando es una decisión de diseño.
+
+Sembrar el volumen desde un contenedor que sí tiene salida, una sola vez:
+
+```bash
+# El nombre del volumen lleva el prefijo del proyecto de Compose.
+docker volume ls | grep ollama-models
+
+docker run --rm -v <proyecto>_ollama-models:/root/.ollama --entrypoint sh \
+  ollama/ollama:0.33.2 -c 'ollama serve >/tmp/s.log 2>&1 & sleep 4; ollama pull qwen3:8b'
+```
+
+Después, el Ollama del stack ve el modelo sin tocar la red. Comprobarlo:
+
+```bash
+docker compose exec ollama ollama list
+```
+
+**No** abras `backend` a internet para evitar este paso. Esa red es lo que impide que un
+almacén con datos del tenant tenga salida; sembrar un volumen una vez cuesta menos que esa
+garantía.
+
+### 1.2 Primer arranque: elegir el alias de modelo
+
+`models.fast` y `models.quality` del perfil apuntan por defecto a `local/fast` y
+`local/quality`, que en `configs/litellm.yaml` son **vLLM** y quieren GPU. En una máquina
+sin GPU:
+
+| Alias | Modelo | Para qué |
+|---|---|---|
+| `local/tiny` | `qwen3:0.6b` (522 MB) | Comprobar que el stack responde. No da respuestas útiles |
+| `local/dev` | `qwen3:8b` (5.2 GB) | Desarrollo real en CPU. La primera petición tarda minutos |
+| `local/fast` · `local/quality` | vLLM | Producción, con GPU |
+
+En CPU, `qwen3:8b` agota el timeout del gateway en la primera petición mientras carga, y un
+arranque sano parece roto. Para una prueba de humo, apunta el perfil de la instancia a
+`local/tiny`.
+
 ## 2. Diagnóstico rápido
 
 | Síntoma | Primer comando | Causa habitual |
@@ -36,6 +79,8 @@ neo4j, nats) y además las **capacidades instaladas** (qué extras están presen
 | Coste disparado | Dashboard "Coste por tenant" | Caché semántica desactivada o budget mal puesto |
 | `verify-ledger` falla | Ver sección 6 | Incidente de integridad: escalar |
 | Un contenedor en `Restarting` | `docker compose logs <servicio>` | Casi siempre permisos: ver 3.6 |
+| `ollama pull` no resuelve DNS | — | La red `backend` es `internal`: sembrar el volumen, ver 1.1 |
+| `model gateway unreachable` | `docker compose ps ollama vllm` | Alias apuntando a un backend que no está levantado, o modelo cargando: ver 1.2 |
 
 ## 3. Incidentes
 
