@@ -9,157 +9,39 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Iterator
-from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 from fastapi import FastAPI
-from langgraph.checkpoint.memory import InMemorySaver
 
-from agent_forge.api.app import create_app
 from agent_forge.api.auth import Authenticator, AuthSettings, parse_api_keys
-from agent_forge.connectors import Allowlist, ConnectorRegistry
 from agent_forge.core.autonomy import AutonomyLevel, AutonomyMap
 from agent_forge.core.classification import Classification
 from agent_forge.core.errors import AuthenticationError
-from agent_forge.core.graph import build_graph
-from agent_forge.core.hitl import ApprovalPolicy, InMemoryApprovalStore
 from agent_forge.core.subgraphs.base import ToolDescriptor
 from agent_forge.core.subgraphs.it_support import ItSupportSubgraph
-from agent_forge.knowledge import (
-    CagPreloader,
-    Classifier,
-    IngestionPipeline,
-    KnowledgeService,
-)
-from agent_forge.knowledge.rag import (
-    HashingEmbeddings,
-    HybridRetriever,
-    InMemoryVectorStore,
-)
-from agent_forge.memory import InMemoryStore, build_memory
-from agent_forge.runtime import Runtime, Settings
-from tests.support import FakeTransport, make_deps, make_gateway, make_policy, make_prompts
+from agent_forge.runtime import Runtime
+from tests.cell import API_KEY, TENANT, make_app, make_runtime
+from tests.support import FakeTransport
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-API_KEY = "test-key-abcdef"
-TENANT = "acme-mx"
 
 TICKET_TOOL = ToolDescriptor(
     name="jira.create_ticket", description="Create a ticket", autonomy_min=AutonomyLevel.A1
 )
 
 
-def _env(**extra: str) -> dict[str, str]:
-    base = {
-        "AGENT_FORGE_PROFILE": str(REPO_ROOT / "configs" / "agent.profile.example.yaml"),
-        "AGENT_FORGE_ENV": "development",
-        "AGENT_FORGE_INSTANCE": "test",
-        "AGENT_API_KEYS": f"{TENANT}:{API_KEY}",
-        "LOG_LEVEL": "WARNING",
-        "MCP_GATEWAY_URL": "http://gw",
-        "N8N_URL": "http://n8n",
-        "GOVERNANCE_PDP_URL": "http://opa:8181",
-        "NATS_URL": "nats://nats:4222",
-        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel:4317",
-        "LITELLM_MASTER_KEY": "sk-test",
-    }
-    base.update(extra)
-    return base
-
-
-def _empty_knowledge() -> KnowledgeService:
-    """A real knowledge service over an empty corpus.
-
-    Empty rather than absent: the API tests should exercise the same code path a
-    deployed cell takes, and "no corpus yet" is the normal state on day one.
-    """
-    store = InMemoryVectorStore()
-    embeddings = HashingEmbeddings(dimension=64)
-    return KnowledgeService(
-        retriever=HybridRetriever(store, embeddings),
-        pipeline=IngestionPipeline(
-            vector_store=store,
-            embeddings=embeddings,
-            classifier=Classifier(default=Classification.C2, use_model=False),
-        ),
-        cag=CagPreloader(store=store),
-        vector_store=store,
-    )
-
-
-def _runtime(
-    transport: FakeTransport,
-    *,
-    subgraph: Any | None = None,
-    autonomy_map: AutonomyMap | None = None,
-    tool_executor: Any | None = None,
-    tool_catalog: tuple[ToolDescriptor, ...] = (),
-) -> Runtime:
-    """A Runtime wired to fakes, bypassing the LiteLLM transport and Postgres."""
-    from agent_forge.profile import load_profile
-
-    env = _env()
-    profile = load_profile(env["AGENT_FORGE_PROFILE"], env=env)
-    gateway = make_gateway(transport)
-    memory = build_memory(store=InMemoryStore(), cache_similarity=0.9)
-    knowledge = _empty_knowledge()
-    registry = ConnectorRegistry(allowlist=Allowlist(builtin=frozenset({"repo_graph.query"})))
-    deps = make_deps(
-        gateway=gateway,
-        subgraph=subgraph,
-        autonomy_map=autonomy_map,
-        tool_executor=tool_executor,
-        tool_catalog=tool_catalog,
-    )
-    deps.memory = memory
-    deps.knowledge = knowledge
-    return Runtime(
-        settings=Settings.from_env(env),
-        profile=profile,
-        prompts=make_prompts(),
-        policy=make_policy(),
-        gateway=gateway,
-        deps=deps,
-        graph=build_graph(deps, checkpointer=InMemorySaver()),
-        authenticator=Authenticator(AuthSettings.from_env(env)),
-        memory=memory,
-        knowledge=knowledge,
-        connectors=registry,
-        approvals=InMemoryApprovalStore(),
-        approval_policy=ApprovalPolicy(approvers_group="finanzas-lideres"),
-        capabilities={"knowledge": False, "memory": False},
-    )
-
-
 @pytest.fixture
 def runtime() -> Runtime:
-    return _runtime(FakeTransport(replies=["El limite es 1500 MXN."]))
+    return make_runtime(FakeTransport(replies=["El limite es 1500 MXN."]))
 
 
 @pytest.fixture
 def app(runtime: Runtime) -> Iterator[FastAPI]:
     """Build the real app but inject the faked runtime instead of the lifespan's."""
-    application = create_app(settings=Settings.from_env(_env()), env=_env())
-    application.router.lifespan_context = _static_lifespan(runtime)
-    yield application
-
-
-def _static_lifespan(runtime: Runtime) -> Any:
-    from contextlib import asynccontextmanager
-
-    from agent_forge.api.app import _mount_channels
-
-    @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        async with AsyncExitStack():
-            app.state.runtime = runtime
-            _mount_channels(app, runtime)
-            yield
-
-    return lifespan
+    yield make_app(runtime)
 
 
 @pytest.fixture
@@ -271,8 +153,7 @@ async def test_streaming_emits_sse_chunks_and_done(client: httpx.AsyncClient) ->
 
 async def test_caller_supplied_system_message_is_dropped(runtime: Runtime) -> None:
     """A system message from the client would be a direct instruction-injection channel."""
-    application = create_app(settings=Settings.from_env(_env()), env=_env())
-    application.router.lifespan_context = _static_lifespan(runtime)
+    application = make_app(runtime)
     transport = httpx.ASGITransport(app=application)
 
     async with (
@@ -326,8 +207,7 @@ async def test_readiness_reports_dependencies_and_capabilities(
 
 async def test_readiness_is_503_when_a_dependency_is_down(runtime: Runtime) -> None:
     runtime.deps.gateway._transport.healthy = False  # type: ignore[attr-defined]
-    application = create_app(settings=Settings.from_env(_env()), env=_env())
-    application.router.lifespan_context = _static_lifespan(runtime)
+    application = make_app(runtime)
 
     async with (
         application.router.lifespan_context(application),
@@ -353,9 +233,7 @@ async def test_admin_rejects_a_bare_tenant_api_key(client: httpx.AsyncClient) ->
 
 
 async def test_admin_config_never_returns_secrets() -> None:
-    runtime = _runtime(FakeTransport())
-    application = create_app(settings=Settings.from_env(_env()), env=_env())
-    application.router.lifespan_context = _static_lifespan(runtime)
+    runtime = make_runtime(FakeTransport())
 
     from agent_forge.api.admin import effective_config
     from agent_forge.core.state import Identity
@@ -385,7 +263,7 @@ async def test_paused_action_appears_in_the_approval_queue() -> None:
         executed.append(tool)
         return {"ok": True}
 
-    runtime = _runtime(
+    runtime = make_runtime(
         FakeTransport(),
         subgraph=ItSupportSubgraph(),
         tool_catalog=(TICKET_TOOL,),
@@ -394,8 +272,7 @@ async def test_paused_action_appears_in_the_approval_queue() -> None:
             default=AutonomyLevel.A1, overrides={"gestionar_accesos": AutonomyLevel.A2}
         ),
     )
-    application = create_app(settings=Settings.from_env(_env()), env=_env())
-    application.router.lifespan_context = _static_lifespan(runtime)
+    application = make_app(runtime)
 
     async with (
         application.router.lifespan_context(application),

@@ -318,3 +318,79 @@ fallaron.
 
 **Siguiente:** F5 · upstream y canales.
 
+
+## 2026-09-01 · F5 · Upstream y canales
+
+### D-031 · El servidor MCP se publica sólo por streamable HTTP
+**Contexto:** `ORCHESTRATORS.md` prometía en F0 stdio *y* HTTP.
+**Decisión:** sólo HTTP. Un servidor stdio es un proceso hijo cuyo control de acceso es el
+permiso de ejecución del binario, lo que rompe la invariante de que toda superficie
+autentica al solicitante y aplica su techo. El stdio sigue en el *cliente* MCP, donde la
+célula es quien lanza el proceso. Registrado como
+[ADR-007](../adr/ADR-007-mcp-server-transport.md).
+
+### D-032 · El `lifespan` padre arranca el de la sub-app de MCP
+**Contexto:** Starlette no ejecuta el `lifespan` de una aplicación montada. El servidor
+MCP quedaba montado pero sin gestor de sesiones, y **toda llamada fallaba en caliente**
+—no en el arranque— con `Task group is not initialized`.
+**Decisión:** el `lifespan` de la aplicación entra en el de la sub-app a través del
+`AsyncExitStack`. Un fallo que sólo aparece en la primera petición de un orquestador es
+peor que uno que impide arrancar.
+
+### D-033 · La protección contra DNS rebinding se configura, no se desactiva
+**Contexto:** el servidor MCP valida la cabecera `Host` y sin configurar sólo acepta
+loopback; detrás de un proxy rechazaba todo. Desactivarla era una línea.
+**Decisión:** derivar la lista de `AGENT_PUBLIC_URL` y ampliarla con `MCP_ALLOWED_HOSTS`.
+Un despliegue detrás de proxy que no fije la URL pública falla cerrado y con mensaje
+claro, que es como debe fallar un control de este tipo.
+
+### D-034 · El Agent Card anuncia skills, nunca el catálogo de tools
+**Razón:** es el único endpoint no autenticado además de liveness —la discovery precede a
+la autenticación—, así que su contenido es público para cualquiera que alcance la célula.
+Enumerar tools o fuentes de conocimiento diría qué sistemas corre el tenant sin aportar
+nada a quien la consume legítimamente. Hay un test que lo comprueba.
+
+### D-035 · El spec de Copilot Studio se genera y se recorta, no se escribe
+**Razón:** un documento OpenAPI escrito a mano se desincroniza del código con total
+seguridad. Se post-procesa el que genera FastAPI y se limita a tres endpoints;
+administración y salud quedan fuera porque publicarlas como acciones invita a un
+orquestador a usarlas.
+
+### D-036 · Un usuario de Teams o Slack fuera del mapa de grupos no ve nada con ACL
+**Razón:** el canal no adivina entitlements. Sin entrada en `TEAMS_GROUP_MAP` /
+`SLACK_GROUP_MAP` el usuario queda autenticado pero sin grupos, y bajo recuperación
+identity-aware eso significa sólo material sin ACL. Es el resultado correcto para quien el
+directorio no sitúa.
+
+### D-037 · El pipe de OpenWebUI es opcional y vive fuera de la célula
+**Razón:** el criterio de salida es que OpenWebUI conecte **sólo con la URL base**, y eso
+ya funciona porque el canal es OpenAI-compatible. El pipe existe únicamente para lo que
+esa conexión no puede hacer —propagar identidad y renderizar citas y `awaiting_approval`
+como estados propios— y se ejecuta dentro de OpenWebUI, no dentro de la célula.
+
+### D-038 · La construcción de una célula de prueba se comparte en `tests/cell.py`
+**Contexto:** `Runtime` ganó dos campos obligatorios y el `Runtime` hecho a mano de
+`test_api.py` dejó de compilar.
+**Decisión:** un solo constructor compartido en vez de parchear la copia. Tres módulos
+ensamblando la célula de tres maneras distintas es tener tres tests de una célula que
+nadie despliega.
+
+### Cierre de F5
+
+**Construido:** ciclo de vida de tarea compartido por MCP y A2A, servidor MCP con las
+cinco tools de RF-03, Agent Card y JSON-RPC A2A, spec saneado para Copilot Studio, canal
+WebSocket, webhooks de Teams y Slack con verificación de firma obligatoria, y pipe
+opcional de OpenWebUI.
+
+**Verificado:** un cliente real del SDK de MCP lista las tools e invoca `run_task` contra
+la app montada; el Agent Card sirve sin credencial y trae los campos que A2A exige sin
+filtrar el catálogo interno; OpenWebUI conecta con sólo la URL base y su API key.
+
+**Dos bugs reales**, ambos de integración y ambos invisibles para un test con dobles: el
+gestor de sesiones de MCP que nunca arrancaba, y el rechazo por cabecera `Host`. El
+primero habría dejado pasar un despliegue aparentemente sano hasta la primera llamada de
+un orquestador.
+
+Cobertura global 82.7 %; 440 tests unit + policy, 1 saltado por plataforma.
+
+**Siguiente:** F6 · gobernanza, ciclo Agregador/Judge y evidencia.

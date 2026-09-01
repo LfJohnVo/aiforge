@@ -5,20 +5,23 @@
 
 ## Resumen
 
-- Módulos Python: **109**
-- Líneas de código: **20982**
-- Clases: **203** · Funciones y métodos de nivel superior: **643**
-- Dependencias externas importadas directamente: **44**
+- Módulos Python: **114**
+- Líneas de código: **23529**
+- Clases: **221** · Funciones y métodos de nivel superior: **738**
+- Dependencias externas importadas directamente: **47**
 
 ## Dependencias entre paquetes
 
 ```mermaid
 flowchart LR
   scripts["scripts<br/>1147 loc"]
-  src_agent_forge["src/agent_forge<br/>320 loc"]
-  src_agent_forge_api["src/agent_forge/api<br/>804 loc"]
+  src_agent_forge["src/agent_forge<br/>422 loc"]
+  src_agent_forge_api["src/agent_forge/api<br/>915 loc"]
   src_agent_forge_channels["src/agent_forge/channels<br/>101 loc"]
   src_agent_forge_channels_openai_api["src/agent_forge/channels/openai_api<br/>317 loc"]
+  src_agent_forge_channels_slack["src/agent_forge/channels/slack<br/>145 loc"]
+  src_agent_forge_channels_teams["src/agent_forge/channels/teams<br/>160 loc"]
+  src_agent_forge_channels_websocket["src/agent_forge/channels/websocket<br/>130 loc"]
   src_agent_forge_connectors["src/agent_forge/connectors<br/>935 loc"]
   src_agent_forge_connectors_databases["src/agent_forge/connectors/databases<br/>529 loc"]
   src_agent_forge_connectors_mcp_client["src/agent_forge/connectors/mcp_client<br/>318 loc"]
@@ -38,34 +41,38 @@ flowchart LR
   src_agent_forge_memory["src/agent_forge/memory<br/>1864 loc"]
   src_agent_forge_observability["src/agent_forge/observability<br/>156 loc"]
   src_agent_forge_profile["src/agent_forge/profile<br/>570 loc"]
-  tests["tests<br/>255 loc"]
+  src_agent_forge_upstream["src/agent_forge/upstream<br/>300 loc"]
+  src_agent_forge_upstream_a2a["src/agent_forge/upstream/a2a<br/>238 loc"]
+  src_agent_forge_upstream_mcp_server["src/agent_forge/upstream/mcp_server<br/>176 loc"]
+  src_agent_forge_upstream_openapi["src/agent_forge/upstream/openapi<br/>170 loc"]
+  tests["tests<br/>464 loc"]
   tests_integration["tests/integration<br/>529 loc"]
-  tests_unit["tests/unit<br/>4558 loc"]
+  tests_unit["tests/unit<br/>5287 loc"]
   tests_unit_connectors["tests/unit/connectors<br/>1417 loc"]
-  tests_unit -->|35| src_agent_forge_core
+  tests_unit -->|38| src_agent_forge_core
+  tests_unit -->|15| tests
   tests_unit_connectors -->|11| src_agent_forge_core
+  tests -->|10| src_agent_forge_core
   src_agent_forge_connectors -->|9| src_agent_forge_core
   src_agent_forge_memory -->|9| src_agent_forge_core
-  tests_unit -->|9| tests
   src_agent_forge_api -->|8| src_agent_forge_core
   src_agent_forge_knowledge -->|8| src_agent_forge_core
   src_agent_forge_memory -->|7| src_agent_forge_observability
   src_agent_forge -->|7| src_agent_forge_core
   tests_integration -->|7| src_agent_forge_core
-  tests -->|7| src_agent_forge_core
   src_agent_forge_knowledge_rag -->|6| src_agent_forge_core
   tests_unit_connectors -->|6| src_agent_forge_connectors
   src_agent_forge_core -->|5| src_agent_forge_observability
   src_agent_forge_core_subgraphs -->|5| src_agent_forge_core
-  tests_unit -->|5| src_agent_forge_knowledge_rag
   src_agent_forge_api -->|4| src_agent_forge_observability
   src_agent_forge_api -->|4| src_agent_forge
   src_agent_forge_gateway -->|4| src_agent_forge_core
   src_agent_forge_knowledge_rag -->|4| src_agent_forge_knowledge
-  tests_unit -->|4| src_agent_forge_knowledge
-  tests_unit -->|4| src_agent_forge_memory
   tests_unit -->|4| src_agent_forge_gateway
+  tests_unit -->|4| src_agent_forge_knowledge_rag
   src_agent_forge_channels_openai_api -->|3| src_agent_forge_core
+  src_agent_forge_channels_slack -->|3| src_agent_forge_core
+  src_agent_forge_channels_teams -->|3| src_agent_forge_core
   src_agent_forge_connectors -->|3| src_agent_forge_observability
   src_agent_forge_connectors_databases -->|3| src_agent_forge_core
   src_agent_forge_connectors_mcp_client -->|3| src_agent_forge_core
@@ -75,12 +82,15 @@ flowchart LR
   src_agent_forge_knowledge -->|3| src_agent_forge_observability
   src_agent_forge_knowledge_rag -->|3| src_agent_forge_observability
   src_agent_forge_profile -->|3| src_agent_forge_core
+  src_agent_forge_upstream_mcp_server -->|3| src_agent_forge_core
   tests_unit -->|3| src_agent_forge_api
   tests_unit -->|3| src_agent_forge_core_subgraphs_it_support
-  tests_unit -->|3| src_agent_forge_connectors
   tests_unit -->|3| src_agent_forge_core_subgraphs
+  tests_unit -->|3| src_agent_forge_knowledge
+  tests_unit -->|3| src_agent_forge_memory
   scripts -->|2| src_agent_forge_observability
   src_agent_forge_api -->|2| src_agent_forge_channels_openai_api
+  src_agent_forge_channels_websocket -->|2| src_agent_forge_core
   src_agent_forge_core -->|2| src_agent_forge_core_subgraphs
   src_agent_forge_knowledge_cag -->|2| src_agent_forge_knowledge
   src_agent_forge_knowledge_graphrag -->|2| src_agent_forge_knowledge
@@ -90,7 +100,12 @@ flowchart LR
   src_agent_forge_memory -->|2| src_agent_forge_gateway
   src_agent_forge -->|2| src_agent_forge_connectors
   src_agent_forge -->|2| src_agent_forge_gateway
+  src_agent_forge_upstream_a2a -->|2| src_agent_forge
+  src_agent_forge_upstream_a2a -->|2| src_agent_forge_core
+  src_agent_forge_upstream -->|2| src_agent_forge_core
+  tests -->|2| src_agent_forge_core_subgraphs
   tests -->|2| src_agent_forge_gateway
+  tests_unit -->|2| src_agent_forge_connectors
   tests_unit -->|2| src_agent_forge_knowledge_graphrag
   tests_unit -->|2| src_agent_forge_knowledge_sources
   scripts -->|1| src_agent_forge_core
@@ -99,6 +114,8 @@ flowchart LR
   src_agent_forge_api -->|1| src_agent_forge_knowledge
   src_agent_forge_api -->|1| src_agent_forge_channels
   src_agent_forge_api -->|1| src_agent_forge_profile
+  src_agent_forge_api -->|1| src_agent_forge_upstream
+  src_agent_forge_api -->|1| src_agent_forge_upstream_openapi
   src_agent_forge_channels -->|1| src_agent_forge_channels_openai_api
   src_agent_forge_channels -->|1| src_agent_forge_connectors_n8n
   src_agent_forge_channels -->|1| src_agent_forge_core
@@ -106,6 +123,15 @@ flowchart LR
   src_agent_forge_channels -->|1| src_agent_forge
   src_agent_forge_channels_openai_api -->|1| src_agent_forge_observability
   src_agent_forge_channels_openai_api -->|1| src_agent_forge
+  src_agent_forge_channels_slack -->|1| src_agent_forge_api
+  src_agent_forge_channels_slack -->|1| src_agent_forge_channels_openai_api
+  src_agent_forge_channels_slack -->|1| src_agent_forge_observability
+  src_agent_forge_channels_slack -->|1| src_agent_forge
+  src_agent_forge_channels_teams -->|1| src_agent_forge_channels_openai_api
+  src_agent_forge_channels_teams -->|1| src_agent_forge_observability
+  src_agent_forge_channels_teams -->|1| src_agent_forge
+  src_agent_forge_channels_websocket -->|1| src_agent_forge_observability
+  src_agent_forge_channels_websocket -->|1| src_agent_forge
   src_agent_forge_connectors_databases -->|1| src_agent_forge_connectors
   src_agent_forge_connectors_databases -->|1| src_agent_forge_observability
   src_agent_forge_connectors_mcp_client -->|1| src_agent_forge_connectors
@@ -151,13 +177,20 @@ flowchart LR
   src_agent_forge -->|1| src_agent_forge_memory
   src_agent_forge -->|1| src_agent_forge_observability
   src_agent_forge -->|1| src_agent_forge_profile
+  src_agent_forge -->|1| src_agent_forge_upstream
+  src_agent_forge_upstream_a2a -->|1| src_agent_forge_channels_openai_api
+  src_agent_forge_upstream_a2a -->|1| src_agent_forge_observability
+  src_agent_forge_upstream_a2a -->|1| src_agent_forge_upstream
+  src_agent_forge_upstream_mcp_server -->|1| src_agent_forge_observability
+  src_agent_forge_upstream_mcp_server -->|1| src_agent_forge_upstream
+  src_agent_forge_upstream_openapi -->|1| src_agent_forge_observability
+  src_agent_forge_upstream -->|1| src_agent_forge_observability
   tests_integration -->|1| src_agent_forge_core_subgraphs
   tests_integration -->|1| src_agent_forge_core_subgraphs_it_support
   tests_integration -->|1| tests
   tests_integration -->|1| src_agent_forge_knowledge
   tests_integration -->|1| src_agent_forge_knowledge_rag
   tests_integration -->|1| src_agent_forge_memory
-  tests -->|1| src_agent_forge_core_subgraphs
   tests -->|1| src_agent_forge_core_subgraphs_generalist
   tests_unit_connectors -->|1| src_agent_forge_connectors_databases
   tests_unit_connectors -->|1| src_agent_forge_connectors_openconnector
@@ -165,8 +198,13 @@ flowchart LR
   tests_unit_connectors -->|1| src_agent_forge_connectors_n8n
   tests_unit_connectors -->|1| tests
   tests_unit -->|1| src_agent_forge
+  tests_unit -->|1| src_agent_forge_channels_slack
+  tests_unit -->|1| src_agent_forge_channels_teams
   tests_unit -->|1| src_agent_forge_connectors_n8n
   tests_unit -->|1| src_agent_forge_profile
+  tests_unit -->|1| src_agent_forge_upstream_mcp_server
+  tests_unit -->|1| src_agent_forge_upstream_openapi
+  tests_unit -->|1| src_agent_forge_upstream
 ```
 
 ## Módulos
@@ -187,7 +225,7 @@ flowchart LR
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../src/agent_forge/__init__.py) | Agent Forge - reusable enterprise agent cell for the PEAK architecture. | 7 | — |
-| [`runtime.py`](../src/agent_forge/runtime.py) | Composition root: turns a profile plus an environment into a running cell. | 313 | `installed_capabilities`, `Settings`, `Runtime`, `check_capabilities`, `load_model_policy`, `build_runtime` |
+| [`runtime.py`](../src/agent_forge/runtime.py) | Composition root: turns a profile plus an environment into a running cell. | 415 | `installed_capabilities`, `Settings`, `TeamsSettings`, `SlackSettings`, `ChannelSettings`, `_group_map` (+4) |
 
 ### `src/agent_forge/analytics`
 
@@ -201,7 +239,7 @@ flowchart LR
 |---|---|---:|---|
 | [`__init__.py`](../src/agent_forge/api/__init__.py) | HTTP surface: application assembly, auth, admin and health. | 16 | `__getattr__` |
 | [`admin.py`](../src/agent_forge/api/admin.py) | Administration and operation API. | 354 | `ApprovalDecision`, `require_authenticated`, `effective_config`, `list_approvals`, `decide_approval`, `task_status` (+7) |
-| [`app.py`](../src/agent_forge/api/app.py) | FastAPI application: assembly and lifecycle. | 123 | `create_app`, `_mount_channels`, `_install_cors`, `_install_error_handlers` |
+| [`app.py`](../src/agent_forge/api/app.py) | FastAPI application: assembly and lifecycle. | 234 | `create_app`, `_mount_channels`, `_mount_mcp`, `_mcp_security`, `_mount_openapi`, `_install_cors` (+1) |
 | [`auth.py`](../src/agent_forge/api/auth.py) | Authentication and identity resolution. | 223 | `parse_api_keys`, `AuthSettings`, `Authenticator`, `_bearer`, `_claim_list`, `verify_slack_signature` |
 | [`health.py`](../src/agent_forge/api/health.py) | Health endpoints. | 88 | `live`, `health`, `ready`, `_run_probes`, `_probe` |
 
@@ -229,24 +267,25 @@ flowchart LR
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../src/agent_forge/channels/openwebui/__init__.py) | Agent Forge package. | 2 | — |
+| [`pipe.py`](../src/agent_forge/channels/openwebui/pipe.py) | OpenWebUI pipe for an Agent Forge cell. | 91 | `Pipe` |
 
 ### `src/agent_forge/channels/slack`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/channels/slack/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/channels/slack/__init__.py) | Slack channel: events webhook with signature verification and a replay window. | 145 | `SlackEvent`, `SlackEnvelope`, `events`, `_identity_for`, `_answer`, `_post` |
 
 ### `src/agent_forge/channels/teams`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/channels/teams/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/channels/teams/__init__.py) | Teams channel: Bot Framework webhook with mandatory signature verification. | 160 | `TeamsActivity`, `_keys`, `verify_bot_framework_token`, `identity_for`, `messages`, `_render` |
 
 ### `src/agent_forge/channels/websocket`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/channels/websocket/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/channels/websocket/__init__.py) | WebSocket channel for the cell's own UIs. | 130 | `ClientMessage`, `chat`, `_authenticate`, `_handle`, `_send` |
 
 ### `src/agent_forge/connectors`
 
@@ -416,30 +455,32 @@ flowchart LR
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../src/agent_forge/upstream/__init__.py) | Agent Forge package. | 2 | — |
+| [`tasks.py`](../src/agent_forge/upstream/tasks.py) | Task lifecycle shared by every upstream surface. | 298 | `TaskState`, `TaskRecord`, `TaskStore`, `InMemoryTaskStore`, `TaskRunner` |
 
 ### `src/agent_forge/upstream/a2a`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/upstream/a2a/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/upstream/a2a/__init__.py) | Agent2Agent: the cell as an A2A agent. | 238 | `MessagePart`, `A2AMessage`, `SendParams`, `JsonRpcRequest`, `agent_card`, `_skills` (+6) |
 
 ### `src/agent_forge/upstream/mcp_server`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/upstream/mcp_server/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/upstream/mcp_server/__init__.py) | The cell published as an MCP server. | 176 | `identity_from_arguments`, `build_mcp_server`, `describe_tools` |
 
 ### `src/agent_forge/upstream/openapi`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/upstream/openapi/__init__.py) | Agent Forge package. | 2 | — |
+| [`__init__.py`](../src/agent_forge/upstream/openapi/__init__.py) | A sanitised OpenAPI 3.1 document for platforms that consume plain REST. | 170 | `sanitise_for_copilot_studio`, `_operation`, `_body`, `simplify`, `_derive_id` |
 
 ### `tests`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../tests/__init__.py) | Agent Forge test suite. | 2 | — |
+| [`cell.py`](../tests/cell.py) | Builders for a whole cell: a real Runtime whose only fakes are at the boundaries. | 209 | `cell_env`, `empty_knowledge`, `_with_surfaces`, `make_runtime`, `make_app` |
 | [`conftest.py`](../tests/conftest.py) | Shared pytest fixtures. | 69 | `repo_root`, `sample_package`, `pytest_asyncio_loop_factories` |
 | [`support.py`](../tests/support.py) | Test doubles that satisfy the same Protocols as the production implementations. | 184 | `FakeTransport`, `FakeRetrievalResult`, `fake_retriever`, `make_policy`, `make_gateway`, `make_prompts` (+2) |
 
@@ -469,8 +510,9 @@ flowchart LR
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../tests/unit/__init__.py) | Agent Forge test suite. | 2 | — |
-| [`test_admin_approvals.py`](../tests/unit/test_admin_approvals.py) | The HITL loop over HTTP: pause, queue, decide, resume. | 300 | `_runtime_with_a2`, `_pause_a_task`, `test_approving_resumes_the_task_and_runs_the_action`, `test_rejecting_resumes_without_running_the_action`, `test_an_approver_outside_the_group_cannot_decide`, `test_unknown_request_id_is_a_404` (+16) |
-| [`test_api.py`](../tests/unit/test_api.py) | The HTTP surface: auth, the OpenAI-compatible channel, admin and health. | 418 | `_env`, `_empty_knowledge`, `_runtime`, `runtime`, `app`, `_static_lifespan` (+18) |
+| [`test_admin_approvals.py`](../tests/unit/test_admin_approvals.py) | The HITL loop over HTTP: pause, queue, decide, resume. | 302 | `_runtime_with_a2`, `_pause_a_task`, `test_approving_resumes_the_task_and_runs_the_action`, `test_rejecting_resumes_without_running_the_action`, `test_an_approver_outside_the_group_cannot_decide`, `test_unknown_request_id_is_a_404` (+16) |
+| [`test_api.py`](../tests/unit/test_api.py) | The HTTP surface: auth, the OpenAI-compatible channel, admin and health. | 295 | `runtime`, `app`, `client`, `_lifespan`, `test_parse_api_keys_maps_secret_to_tenant`, `test_parse_api_keys_rejects_malformed_entries` (+14) |
+| [`test_channels.py`](../tests/unit/test_channels.py) | The conversational channels: WebSocket, Teams, Slack and OpenWebUI. | 426 | `_cell`, `test_a_socket_without_a_credential_is_closed_before_it_becomes_a_session`, `test_a_socket_authenticated_by_query_parameter_receives_the_typed_events`, `test_a_malformed_frame_is_an_error_event_not_a_dropped_connection`, `_drain`, `_rsa_token` (+24) |
 | [`test_connectors_in_graph.py`](../tests/unit/test_connectors_in_graph.py) | Connectors as the graph uses them, and the generator that creates new ones. | 325 | `ToolCallingSubgraph`, `run`, `test_an_n8n_callback_lets_the_graph_finish`, `test_a_workflow_that_never_answers_does_not_claim_success`, `test_the_graph_offers_only_allowlisted_healthy_tools`, `test_a_builtin_tool_is_offered_without_an_allowlist_entry` (+6) |
 | [`test_docs_check.py`](../tests/unit/test_docs_check.py) | Tests for the documentation completeness gate. | 119 | `test_this_repository_passes_the_gate`, `test_missing_file_is_reported`, `test_stub_is_reported`, `test_placeholder_markers_are_rejected`, `test_missing_heading_is_reported`, `test_fewer_than_four_accepted_adrs_fails` (+6) |
 | [`test_docs_check_markers.py`](../tests/unit/test_docs_check_markers.py) | Regression tests for the two false positives the docs gate hit on its first run. | 73 | `_doc`, `test_spanish_word_todo_is_not_a_placeholder`, `test_uppercase_todo_in_prose_is_still_a_placeholder`, `test_marker_inside_inline_code_is_a_reference_not_a_marker`, `test_marker_inside_fenced_block_is_ignored`, `test_stripping_code_preserves_line_numbers` (+2) |
@@ -483,6 +525,7 @@ flowchart LR
 | [`test_memory_in_graph.py`](../tests/unit/test_memory_in_graph.py) | Memory as the graph actually uses it. | 264 | `run`, `_memory`, `test_the_agent_remembers_a_fact_between_sessions`, `test_conversation_history_is_carried_into_the_next_turn`, `test_a_repeated_question_is_answered_from_cache_without_a_model_call`, `test_a_cache_hit_is_not_served_to_a_narrower_requester` (+9) |
 | [`test_model_policy.py`](../tests/unit/test_model_policy.py) | The data-sovereignty invariant: C3/C4 content never reaches an external backend. | 216 | `policy`, `test_classified_content_never_routes_externally`, `test_classified_content_with_only_external_backends_raises`, `test_assert_allowed_catches_classification_raised_after_routing`, `test_external_backend_cannot_declare_a_ceiling_above_c2`, `test_config_without_sovereignty_metadata_is_treated_as_external` (+14) |
 | [`test_repo_graph.py`](../tests/unit/test_repo_graph.py) | Tests for the repository graph builder (RF-12). | 120 | `test_discover_skips_noise`, `test_parse_module_extracts_symbols_and_docs`, `test_parse_module_marks_async_functions`, `test_parse_module_returns_none_on_syntax_error`, `test_module_id_strips_src_and_init`, `test_build_graph_links_internal_imports` (+5) |
+| [`test_upstream.py`](../tests/unit/test_upstream.py) | The upstream surfaces: task lifecycle, MCP server, A2A and the Copilot Studio spec. | 424 | `_identity`, `_finished`, `test_ask_runs_to_completion_and_records_the_answer`, `test_a_paused_graph_surfaces_upstream_as_input_required`, `test_a_failing_graph_becomes_a_failed_task_not_an_exception`, `test_submit_returns_before_the_answer_and_status_finds_it_later` (+26) |
 
 ### `tests/unit/connectors`
 
@@ -497,4 +540,4 @@ flowchart LR
 
 ## Dependencias externas
 
-`__future__`, `abc`, `argparse`, `ast`, `asyncio`, `collections`, `contextlib`, `coverage_gate`, `dataclasses`, `datetime`, `docs_check`, `enum`, `fastapi`, `fnmatch`, `functools`, `hashlib`, `hmac`, `httpx`, `importlib`, `jinja2`, `json`, `jwt`, `langgraph`, `logging`, `math`, `mcp`, `networkx`, `os`, `pathlib`, `pydantic`, `pytest`, `re`, `repo_graph`, `respx`, `socket`, `structlog`, `subprocess`, `sys`, `time`, `typing`, `unicodedata`, `uuid`, `xml`, `yaml`
+`__future__`, `abc`, `argparse`, `ast`, `asyncio`, `collections`, `contextlib`, `copy`, `coverage_gate`, `cryptography`, `dataclasses`, `datetime`, `docs_check`, `enum`, `fastapi`, `fnmatch`, `functools`, `hashlib`, `hmac`, `httpx`, `importlib`, `jinja2`, `json`, `jwt`, `langgraph`, `logging`, `math`, `mcp`, `networkx`, `os`, `pathlib`, `pydantic`, `pytest`, `re`, `repo_graph`, `requests`, `respx`, `socket`, `structlog`, `subprocess`, `sys`, `time`, `typing`, `unicodedata`, `uuid`, `xml`, `yaml`

@@ -6,6 +6,17 @@ Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado
 ## [Unreleased]
 
 ### Added
+- **F5 · Upstream y canales**: ciclo de vida de tarea compartido por MCP y A2A
+  (`submitted → working → input-required → completed | failed | canceled`), servidor MCP
+  por streamable HTTP en `/mcp/` con `ask`, `run_task`, `get_status`, `search_knowledge`
+  y `repo_graph_query`; Agent Card A2A en `/.well-known/agent.json` y
+  `/.well-known/agent-card.json` con JSON-RPC en `POST /a2a`; spec OpenAPI 3.1 saneado
+  para Copilot Studio en `/openapi/copilot-studio.json`; canal WebSocket `/ws/chat` con
+  eventos tipados; webhooks de Teams y Slack con verificación de firma obligatoria; y
+  pipe opcional de OpenWebUI.
+- ADR-007 (transporte del servidor MCP).
+- `MCP_ALLOWED_HOSTS`, `TEAMS_APP_ID`, `TEAMS_GROUP_MAP`, `SLACK_SIGNING_SECRET`,
+  `SLACK_BOT_TOKEN` y `SLACK_GROUP_MAP` en `.env.example`.
 - **F4 · Conectores**: `BaseConnector` con defaults seguros (A2, C4, health real),
   registry con allowlist por tenant y doble comprobación, cliente MCP multi-transporte,
   n8n con callbacks que reanudan el grafo, OpenConnector dirigido por spec OpenAPI,

@@ -39,9 +39,11 @@ from agent_forge.core.hitl import (
 )
 from agent_forge.core.state import AgentState, Identity, Message
 from agent_forge.core.subgraphs.it_support import ItSupportSubgraph
+from tests.cell import TENANT
+from tests.cell import make_runtime as _runtime
 from tests.support import FakeTransport, make_state
 
-from .test_api import TENANT, TICKET_TOOL, _runtime
+from .test_api import TICKET_TOOL
 
 APPROVER = Identity(
     tenant_id=TENANT,

@@ -1,6 +1,7 @@
 # Canales (downstream)
 
-> Estado: API OpenAI-compatible en F1; el resto en F5.
+> Estado: implementado. API OpenAI-compatible en F1; WebSocket, Teams, Slack y el pipe
+> de OpenWebUI en F5.
 
 Un canal traduce un transporte concreto al contrato interno de la célula. La regla que
 los ordena: **el canal no decide nada**. No filtra conocimiento, no elige modelo, no
@@ -37,33 +38,61 @@ tenant identifica al tenant, no al usuario: sin JWT el techo es C0.
 
 ## 3. OpenWebUI
 
-Pipe empaquetado en `channels/openwebui/`. Registrar la célula requiere sólo la URL base
-más la API key, porque el canal ya es OpenAI-compatible. El pipe añade el paso de la
-identidad del usuario de OpenWebUI a `user_id`/`groups`.
+Registrar la célula requiere **sólo la URL base y la API key**, en *Settings →
+Connections → OpenAI API*: no hace falta ningún código, porque el canal ya es
+OpenAI-compatible. OpenWebUI sondea `{base}/models` al añadir la conexión y luego publica
+en `{base}/chat/completions`.
+
+El pipe de `channels/openwebui/pipe.py` es **opcional** y resuelve dos cosas que esa
+conexión no puede: propagar la identidad del usuario de OpenWebUI —sin ella la célula ve
+un solicitante anónimo y responde sólo con material público (C0)— y renderizar citas y
+`awaiting_approval` como estados propios en vez de texto dentro de la respuesta. Se copia
+en *Workspace → Functions → New Function*; se ejecuta dentro de OpenWebUI, no dentro de la
+célula.
 
 ## 4. Copilot Studio
 
-Manifiesto **OpenAPI 3.1** limpio en `channels/copilot_studio/` (sin `oneOf`
-anidados ni `additionalProperties` libres, que Copilot Studio rechaza). Se registra como
-acción personalizada. Ver también `ORCHESTRATORS.md`: Copilot Studio puede consumir la
+Manifiesto **OpenAPI 3.1** saneado, servido en `GET /openapi/copilot-studio.json` y
+generado por `upstream/openapi/` (sin `$ref` sin resolver, sin `anyOf` de nulabilidad, sin
+`additionalProperties` libres: los tres constructos que Copilot Studio rechaza). Se
+registra como acción personalizada. Ver también `ORCHESTRATORS.md`: Copilot Studio puede consumir la
 célula como canal *o* como agente A2A.
 
 ## 5. Teams y Slack
 
 Webhooks entrantes con **verificación de firma obligatoria**:
 
-* Teams: validación del JWT del Bot Framework contra el JWKS de Microsoft.
-* Slack: `v0=` HMAC-SHA256 sobre `timestamp:body` con ventana de 5 minutos.
+* Teams: validación del JWT del Bot Framework contra el JWKS de Microsoft
+  (`https://login.botframework.com/v1/.well-known/keys`), con emisor `https://api.botframework.com`
+  y **audiencia fijada a `TEAMS_APP_ID`**. Sin ese app id el webhook rechaza todo: una
+  audiencia sin fijar aceptaría el token de cualquier bot del Bot Framework, que es el
+  ataque entero.
+* Slack: `v0=` HMAC-SHA256 sobre `v0:{timestamp}:{body}` con ventana de 5 minutos. Las dos
+  mitades cuentan: la firma prueba quién envía, la ventana impide reproducir una petición
+  capturada. Slack reintenta lo que no ve confirmado en 3 s, así que la respuesta se
+  produce en segundo plano y el webhook contesta de inmediato.
 
-Una petición con firma inválida o antigua se descarta sin procesar y se registra. La
-identidad del usuario de la plataforma se mapea a `user_id`/`groups` mediante el
-directorio configurado en el perfil.
+Una petición con firma inválida o antigua se descarta sin procesar y se registra.
+
+La identidad de la plataforma se mapea a grupos del tenant con `TEAMS_GROUP_MAP` y
+`SLACK_GROUP_MAP` (formato `usuario:grupo1|grupo2,usuario2:grupo3`). Un usuario ausente
+del mapa queda **autenticado pero sin grupos**, y por tanto sin acceso a nada con ACL: es
+lo correcto para quien el directorio no sitúa, y no se adivina.
 
 ## 6. WebSocket
 
 `/ws/chat` para UIs propias. Mismo contrato, mensajes JSON delimitados por evento
-(`token`, `citation`, `awaiting_approval`, `done`, `error`). Autenticación en el
-handshake; una conexión sin token válido se cierra con 4401.
+(`ready`, `token`, `citation`, `awaiting_approval`, `done`, `error`). Autenticación en el
+handshake, **antes** de aceptar la conexión: una conexión sin credencial válida se cierra
+con 4401 y nunca llega a ser sesión.
+
+La credencial va en la cabecera `Authorization` o, para navegadores —que no pueden fijar
+cabeceras en un handshake WebSocket—, en el parámetro `api_key`. Es la razón por la que la
+célula debe ir detrás de TLS: un token en un query string es un token en el log de algún
+proxy.
+
+Una trama malformada produce un evento `error` y la conversación sigue; no se cierra el
+socket.
 
 ## 7. Añadir un canal
 

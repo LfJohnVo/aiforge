@@ -41,6 +41,7 @@ from agent_forge.knowledge import KnowledgeService, build_knowledge
 from agent_forge.memory import MemoryManager, Scrubber, build_memory
 from agent_forge.observability.logging import configure_logging, get_logger
 from agent_forge.profile import AgentProfile, load_profile
+from agent_forge.upstream.tasks import TaskRunner
 
 log = get_logger(__name__)
 
@@ -79,6 +80,14 @@ class Settings:
     postgres_dsn: str = ""
     redis_url: str = ""
     checkpointer: CheckpointerKind = "postgres"
+    # Absolute base URL of this cell, as an orchestrator sees it. The A2A Agent Card
+    # and the n8n callback both need it; a relative URL is useless to a remote caller.
+    public_url: str = ""
+    # Extra Host header values the MCP surface accepts, for a cell reachable under more
+    # than one name. The public URL's own host is always allowed; this is the override
+    # for the rest, and it stays a list rather than a wildcard because the check it
+    # feeds is what stops DNS rebinding.
+    mcp_allowed_hosts: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -100,11 +109,69 @@ class Settings:
             postgres_dsn=dsn,
             redis_url=source.get("REDIS_URL", ""),
             checkpointer=kind,
+            public_url=source.get("AGENT_PUBLIC_URL", "").rstrip("/"),
+            mcp_allowed_hosts=tuple(
+                h.strip() for h in source.get("MCP_ALLOWED_HOSTS", "").split(",") if h.strip()
+            ),
         )
 
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+
+@dataclass(slots=True)
+class TeamsSettings:
+    """Teams webhook configuration. Without ``app_id`` the channel refuses requests."""
+
+    app_id: str = ""
+    group_map: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class SlackSettings:
+    """Slack webhook configuration. Without the signing secret nothing verifies."""
+
+    signing_secret: str = ""
+    bot_token: str = ""
+    group_map: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ChannelSettings:
+    """Per-channel secrets and identity mappings, read from the environment."""
+
+    teams: TeamsSettings = field(default_factory=TeamsSettings)
+    slack: SlackSettings = field(default_factory=SlackSettings)
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str]) -> ChannelSettings:
+        return cls(
+            teams=TeamsSettings(
+                app_id=env.get("TEAMS_APP_ID", ""),
+                group_map=_group_map(env.get("TEAMS_GROUP_MAP", "")),
+            ),
+            slack=SlackSettings(
+                signing_secret=env.get("SLACK_SIGNING_SECRET", ""),
+                bot_token=env.get("SLACK_BOT_TOKEN", ""),
+                group_map=_group_map(env.get("SLACK_GROUP_MAP", "")),
+            ),
+        )
+
+
+def _group_map(raw: str) -> dict[str, list[str]]:
+    """Parse ``user:group1|group2,user2:group3`` into a mapping.
+
+    A user absent from the map ends up with no groups, which under identity-aware
+    retrieval means they see nothing with an ACL. That is the intended default: the cell
+    must not guess entitlements for someone the directory has not placed.
+    """
+    mapping: dict[str, list[str]] = {}
+    for entry in raw.split(","):
+        user, _, groups = entry.strip().partition(":")
+        if user and groups:
+            mapping[user.strip()] = [g.strip() for g in groups.split("|") if g.strip()]
+    return mapping
 
 
 @dataclass(slots=True)
@@ -122,6 +189,8 @@ class Runtime:
     memory: MemoryManager
     knowledge: KnowledgeService
     connectors: ConnectorRegistry
+    tasks: TaskRunner
+    channel_settings: ChannelSettings
     approvals: ApprovalStore
     approval_policy: ApprovalPolicy
     capabilities: dict[str, bool] = field(default_factory=dict)
@@ -277,6 +346,37 @@ async def build_runtime(
     )
     graph = build_graph(deps, checkpointer=checkpointer)
 
+    async def invoke(state: Any) -> Any:
+        """Run one task through the graph, namespaced by tenant and instance."""
+        from agent_forge.core.checkpointer import namespaced_thread_id
+        from agent_forge.core.state import AgentState
+
+        raw = await graph.ainvoke(
+            state,
+            {
+                "configurable": {
+                    "thread_id": namespaced_thread_id(
+                        state.identity.tenant_id, settings.instance, state.thread_id
+                    )
+                }
+            },
+        )
+        if isinstance(raw, AgentState):
+            return raw
+        payload = {k: v for k, v in raw.items() if not k.startswith("__")}
+        final = AgentState.model_validate(payload)
+        # An interrupt means the graph paused for a human; upstream must see that as
+        # `input-required`, not as a task that quietly finished.
+        if raw.get("__interrupt__"):
+            return final.model_copy(update={"status": "awaiting_approval"})
+        return final
+
+    tasks = TaskRunner(
+        invoke,
+        agent_name=profile.identity.agent_name,
+        area=profile.identity.area,
+    )
+
     runtime = Runtime(
         settings=settings,
         profile=profile,
@@ -289,6 +389,8 @@ async def build_runtime(
         memory=memory,
         knowledge=knowledge,
         connectors=connectors,
+        tasks=tasks,
+        channel_settings=ChannelSettings.from_env(dict(source)),
         approvals=InMemoryApprovalStore(),
         approval_policy=ApprovalPolicy(
             approvers_group=profile.governance.hitl_approvers_group,
