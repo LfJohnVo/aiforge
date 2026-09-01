@@ -9,7 +9,7 @@ Reglas permanentes:
 - Un commit por unidad lógica; actualiza docs/memory/DECISIONS_LOG.md al cerrar cada fase.
 - Ante ambigüedad: decide, registra un ADR y continúa. No esperes confirmación.
 - En la Fase 0 expande este archivo según ordena el prompt, pero NUNCA borres este bloque de misión.
-- Estado actual: Fase 2 — Memoria (F0 y F1 cerradas)
+- Estado actual: Fase 3 — Conocimiento (F0, F1 y F2 cerradas)
 
 ---
 
@@ -95,6 +95,11 @@ Estas son las que rompen el producto si se violan. Cada una tiene un test que la
 7. **`tenant_id` es parte de la clave** en Redis, Postgres, Qdrant, Neo4j, NATS y ledger.
 8. **Los prompts no se auto-despliegan.** Cambio de prompt = PR + evals.
 9. **El ledger es append-only** con hash-chain; se verifica antes de exportar.
+10. **Nada persiste sin scrubbear.** Las cuatro capas de memoria pasan por
+    `memory/scrubbing.py`; una entrada de caché con PII no se guarda redactada, no
+    se guarda.
+11. **La caché semántica respeta alcance**, no sólo clasificación: sirve una entrada
+    sólo si el solicitante tiene *todos* los grupos con los que se generó.
 
 ## 5. Convenciones
 
@@ -133,8 +138,8 @@ Dos restricciones que vienen de resolver el lockfile, no de preferencia:
 |---|---|---|
 | F0 | Fundación: scaffold, tooling, CI, docs, ADR-001..006 | **cerrada** |
 | F1 | Núcleo agéntico + canal OpenAI-compatible | **cerrada** |
-| F2 | Memoria STM/LTM/episódica, caché semántica, olvido | **en curso** |
-| F3 | Conocimiento: ingesta, RAG/CAG/GraphRAG, ACL | pendiente |
+| F2 | Memoria STM/LTM/episódica, caché semántica, olvido | **cerrada** |
+| F3 | Conocimiento: ingesta, RAG/CAG/GraphRAG, ACL | **en curso** |
 | F4 | Conectores: registry, MCP client, n8n, OpenConnector, BDs | pendiente |
 | F5 | Upstream MCP/A2A/OpenAPI + canales restantes | pendiente |
 | F6 | Gobernanza, Agregador/Judge, evidencia | pendiente |

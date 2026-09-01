@@ -32,6 +32,7 @@ from agent_forge.core.router import IntentRouter
 from agent_forge.core.subgraphs.base import load_subgraph
 from agent_forge.gateway.litellm_client import GovernedGateway, LiteLLMTransport
 from agent_forge.gateway.model_policy import ModelPolicy
+from agent_forge.memory import MemoryManager, Scrubber, build_memory
 from agent_forge.observability.logging import configure_logging, get_logger
 from agent_forge.profile import AgentProfile, load_profile
 
@@ -112,6 +113,7 @@ class Runtime:
     deps: GraphDeps
     graph: Any
     authenticator: Authenticator
+    memory: MemoryManager
     approvals: ApprovalStore
     approval_policy: ApprovalPolicy
     capabilities: dict[str, bool] = field(default_factory=dict)
@@ -126,6 +128,7 @@ class Runtime:
 
     async def aclose(self) -> None:
         await self.gateway.aclose()
+        await self.memory.store.aclose()
 
 
 def check_capabilities(profile: AgentProfile, *, strict: bool) -> dict[str, bool]:
@@ -195,6 +198,25 @@ async def build_runtime(
     planner = Planner(prompts, gateway=gateway, model_alias=profile.models.fast)
     router = IntentRouter(subgraph.intents, gateway=gateway, fast_alias=profile.models.fast)
 
+    memory = build_memory(
+        redis_url=source.get("REDIS_URL", ""),
+        redis_password=source.get("REDIS_PASSWORD", ""),
+        instance=settings.instance,
+        scope=profile.memory.ltm.scope,
+        ltm_enabled=profile.memory.ltm.enabled,
+        episodic_enabled=profile.memory.episodic.enabled,
+        stm_ttl_minutes=profile.memory.stm_ttl_minutes,
+        cache_enabled=profile.memory.semantic_cache.enabled,
+        cache_similarity=profile.memory.semantic_cache.similarity,
+        cache_ttl_hours=profile.memory.semantic_cache.ttl_hours,
+        retention_days=profile.memory.retention_days,
+        scrubber=Scrubber(
+            enabled=profile.governance.dlp.enabled, language=profile.identity.language
+        ),
+        gateway=gateway,
+        fast_model=profile.models.fast,
+    )
+
     deps = GraphDeps(
         subgraph=subgraph,
         prompts=prompts,
@@ -207,6 +229,7 @@ async def build_runtime(
         language=profile.identity.language,
         persona=profile.identity.persona,
         max_retries=profile.events.judge.max_retries,
+        memory=memory,
     )
 
     checkpointer = await stack.enter_async_context(
@@ -227,6 +250,7 @@ async def build_runtime(
         deps=deps,
         graph=graph,
         authenticator=Authenticator(AuthSettings.from_env(source)),
+        memory=memory,
         approvals=InMemoryApprovalStore(),
         approval_policy=ApprovalPolicy(
             approvers_group=profile.governance.hitl_approvers_group,
@@ -243,5 +267,6 @@ async def build_runtime(
         checkpointer=settings.checkpointer,
         channels=profile.channels.enabled_names(),
         capabilities=sorted(k for k, v in capabilities.items() if v),
+        memory_scope=profile.memory.ltm.scope,
     )
     return runtime

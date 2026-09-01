@@ -6,6 +6,11 @@ Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado
 ## [Unreleased]
 
 ### Added
+- **F2 · Memoria**: `KeyValueStore` tras `Protocol` (Redis y en memoria), STM con TTL y
+  resumen incremental, LTM con adapter propio por defecto y Mem0 para producción,
+  memoria episódica de área, caché semántica que respeta clasificación **y grupos**,
+  scrubbing de PII ES/EN con checksum, y `forget` que barre las cuatro capas expuesto en
+  `/admin/memory/forget`. Embeddings soberanos en el gateway (`/v1/embeddings`).
 - **F1 · Núcleo agéntico + canal base**: grafo LangGraph completo
   (`intake → governance_gate → planner → domain_subgraph → tools → synthesis →
   quality_gate → respond`), `AgentState` tipado, checkpointer Postgres/Redis/memoria,

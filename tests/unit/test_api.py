@@ -27,6 +27,7 @@ from agent_forge.core.graph import build_graph
 from agent_forge.core.hitl import ApprovalPolicy, InMemoryApprovalStore
 from agent_forge.core.subgraphs.base import ToolDescriptor
 from agent_forge.core.subgraphs.it_support import ItSupportSubgraph
+from agent_forge.memory import InMemoryStore, build_memory
 from agent_forge.runtime import Runtime, Settings
 from tests.support import FakeTransport, make_deps, make_gateway, make_policy, make_prompts
 
@@ -71,6 +72,7 @@ def _runtime(
     env = _env()
     profile = load_profile(env["AGENT_FORGE_PROFILE"], env=env)
     gateway = make_gateway(transport)
+    memory = build_memory(store=InMemoryStore(), cache_similarity=0.9)
     deps = make_deps(
         gateway=gateway,
         subgraph=subgraph,
@@ -78,6 +80,7 @@ def _runtime(
         tool_executor=tool_executor,
         tool_catalog=tool_catalog,
     )
+    deps.memory = memory
     return Runtime(
         settings=Settings.from_env(env),
         profile=profile,
@@ -87,6 +90,7 @@ def _runtime(
         deps=deps,
         graph=build_graph(deps, checkpointer=InMemorySaver()),
         authenticator=Authenticator(AuthSettings.from_env(env)),
+        memory=memory,
         approvals=InMemoryApprovalStore(),
         approval_policy=ApprovalPolicy(approvers_group="finanzas-lideres"),
         capabilities={"knowledge": False, "memory": False},

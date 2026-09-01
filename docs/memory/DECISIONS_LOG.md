@@ -135,3 +135,58 @@ eran de seguridad: la autonomía concedida que no podía reducirse, y la pausa H
 llegaba a la cola (una acción A2 quedaba esperando a un humano que nunca la veía).
 
 **Siguiente:** F2 · memoria.
+
+---
+
+## 2026-09-01 · F2 · Memoria
+
+### D-013 · Una entrada de caché con PII no se guarda, no se guarda redactada
+**Contexto:** la caché semántica persistía pregunta y respuesta en claro mientras las
+otras tres capas scrubbeaban. Lo detectó un test de invariante.
+**Alternativas:** (a) redactar la respuesta antes de cachearla — serviría una réplica
+degradada, distinta de lo que devolvería una llamada fresca; (b) usar la pregunta
+redactada como clave — haría que la pregunta de otra persona con otro correo coincidiera
+con la misma entrada, una fuga peor que la original.
+**Decisión:** si la pregunta o la respuesta contienen PII, la entrada se omite y se
+registra (`cache.skipped_pii`). Una respuesta con PII es específica de una persona y por
+tanto mal candidato a caché de todos modos.
+
+### D-014 · La caché comprueba alcance, no sólo clasificación
+**Razón:** dos personas con el mismo techo C2 pueden tener reach distinto. Una respuesta
+sintetizada para `finanzas-lideres` puede contener material que un miembro de `finanzas`
+no debe ver. La entrada guarda el conjunto de grupos con el que se generó y sólo sirve
+peticiones cuyo conjunto lo contenga.
+
+### D-015 · Las preferencias se recuperan siempre, no por consulta
+**Contexto:** `recall()` puntúa por solapamiento con la pregunta. "Responde breve" no
+comparte vocabulario con ninguna pregunta, así que nunca se recuperaba.
+**Decisión:** `recall()` acepta filtro por tipo de hecho, y `context_for` trae los
+`preference` de forma incondicional además de los `fact` que coinciden con la consulta.
+
+### D-016 · El almacén de memoria es un `Protocol`, no Redis directamente
+**Razón:** hace que las pruebas de aislamiento entre tenants y de borrado —las dos que
+protegen requisitos de cumplimiento— corran en cada commit sin infraestructura. El
+`InMemoryStore` implementa TTL real, así que no es un doble degradado. Las partes que
+pueden divergir (TTL, SCAN, conteos de borrado) se prueban además contra Redis real.
+
+### D-017 · Alcance `user` no lee el bucket del área
+**Razón:** un hecho aprendido de un colega es memoria del **área**, no de esta persona.
+Mezclarlos haría que un alcance restrictivo devolviera exactamente lo que restringe.
+
+### Cierre de F2
+
+**Construido:** las cuatro capas de memoria tras `Protocol`, con dos implementaciones
+cada una donde importa; scrubbing determinista de nueve tipos de PII ES/EN con checksum;
+`forget` que barre todas las capas y devuelve un informe por capa; cableado al grafo y a
+`/admin/memory`; embeddings soberanos en el gateway.
+
+**Verificado:** el agente recuerda entre sesiones; la caché ahorra la llamada al modelo y
+el ahorro es medible; `forget` no deja una sola clave, comprobado también contra Redis
+real vía testcontainers. 202 tests unitarios y 11 de integración en verde; cobertura
+`memory` 85.7 %.
+
+**Tres defectos de diseño corregidos**, detallados en la nota de sesión. El primero era
+una fuga real de PII a un almacén persistente.
+
+**Siguiente:** F3 · conocimiento.
+

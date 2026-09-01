@@ -17,6 +17,7 @@ from agent_forge.api.admin import (
     effective_config,
     forget,
     list_approvals,
+    memory_stats,
     task_status,
 )
 from agent_forge.core.autonomy import AutonomyLevel, AutonomyMap
@@ -36,7 +37,7 @@ from agent_forge.core.hitl import (
     build_request,
     summarise_action,
 )
-from agent_forge.core.state import AgentState, Identity
+from agent_forge.core.state import AgentState, Identity, Message
 from agent_forge.core.subgraphs.it_support import ItSupportSubgraph
 from tests.support import FakeTransport, make_state
 
@@ -167,13 +168,40 @@ async def test_task_status_for_an_unknown_thread_is_a_404() -> None:
         await task_status("t", "no-such-thread", runtime, APPROVER)
 
 
-async def test_forget_reports_not_implemented_rather_than_lying() -> None:
-    """Claiming a deletion that did not happen is a compliance failure."""
+async def test_forget_reports_exactly_what_was_deleted() -> None:
+    """The report is evidence; it has to reflect what actually happened per layer."""
+    runtime = _runtime_with_a2([])
+    state = make_state("una pregunta", tenant_id=TENANT).model_copy(
+        update={"status": "completed", "answer": "una respuesta"}
+    )
+    await runtime.memory.record_turn(
+        state, user_message=Message(role="user", content="una pregunta")
+    )
+    await runtime.memory.remember_facts(state, ["un hecho recordado"])
+
+    result = await forget(runtime, APPROVER, "user", "u1", [state.thread_id])
+
+    assert result["status"] == "ok"
+    assert result["deleted"]["short_term"] == 1
+    assert result["deleted"]["long_term"] == 1
+
+
+async def test_wiping_a_whole_tenant_requires_an_approver() -> None:
+    """Cell-wide irreversible deletion is not something any authenticated user may do."""
     runtime = _runtime_with_a2([])
 
-    response = await forget(runtime, APPROVER, "user", "u1")
+    with pytest.raises(AuthorizationError, match="approvers group"):
+        await forget(runtime, OUTSIDER, "tenant", None, None)
 
-    assert response.status_code == 501
+
+async def test_memory_stats_are_reported() -> None:
+    runtime = _runtime_with_a2([])
+
+    stats = await memory_stats(runtime, APPROVER)
+
+    assert stats["healthy"] is True
+    assert stats["cache_hits"] == 0
+    assert stats["retention_days"] == 365
 
 
 async def test_effective_config_lists_backend_sovereignty() -> None:

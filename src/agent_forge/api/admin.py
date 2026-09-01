@@ -228,31 +228,57 @@ async def task_status(
     }
 
 
+@router.get("/memory")
+async def memory_stats(
+    runtime: Annotated[Runtime, Depends(get_runtime)],
+    identity: Annotated[Identity, Depends(require_authenticated)],
+) -> dict[str, Any]:
+    """What memory this cell holds and how it is performing."""
+    _same_tenant(identity, runtime)
+    return {
+        "instance": runtime.instance_key,
+        "healthy": await runtime.memory.health(),
+        **runtime.memory.stats(),
+        "retention_days": runtime.profile.memory.retention_days,
+        "stm_ttl_minutes": runtime.profile.memory.stm_ttl_minutes,
+    }
+
+
 @router.post("/memory/forget")
 async def forget(
     runtime: Annotated[Runtime, Depends(get_runtime)],
     identity: Annotated[Identity, Depends(require_authenticated)],
     scope: Annotated[Literal["user", "tenant"], Query()] = "user",
     subject: Annotated[str | None, Query()] = None,
+    thread_id: Annotated[list[str] | None, Query()] = None,
 ) -> dict[str, Any]:
-    """Right to be forgotten. Wired to the memory layer in F2.
+    """Right to be forgotten. Deletes across every memory layer.
 
-    Returns 501 rather than pretending: reporting a deletion that did not happen is a
-    compliance failure, not a stub.
+    Wiping a whole tenant is an irreversible, cell-wide act, so it needs a member of the
+    approvers group rather than any authenticated user.
     """
     _same_tenant(identity, runtime)
-    return JSONResponse(  # type: ignore[return-value]
-        {
-            "status": "not_implemented",
-            "detail": (
-                "la capa de memoria se implementa en F2; ninguna memoria persistente "
-                "existe todavia en esta celula"
-            ),
-            "scope": scope,
-            "subject": subject or identity.user_id,
-        },
-        status_code=501,
+    if scope == "tenant" and not _is_approver(identity, runtime):
+        raise AuthorizationError(
+            "wiping a tenant's memory requires membership of the approvers group",
+            required_group=runtime.approval_policy.approvers_group,
+        )
+
+    target = subject or identity.user_id
+    report = await runtime.memory.forget(
+        identity.tenant_id,
+        scope=scope,
+        user_id=None if scope == "tenant" else target,
+        area=runtime.profile.identity.area,
+        thread_ids=thread_id or [],
     )
+    log.info("admin.memory_forgotten", actor=identity.user_id, **report.to_dict())
+    return {"status": "ok", **report.to_dict()}
+
+
+def _is_approver(identity: Identity, runtime: Runtime) -> bool:
+    group = runtime.approval_policy.approvers_group
+    return bool(group) and group in identity.groups
 
 
 def _same_tenant(identity: Identity, runtime: Runtime) -> None:

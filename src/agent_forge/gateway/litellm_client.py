@@ -71,6 +71,8 @@ class ModelTransport(Protocol):
 
     def stream(self, request: ChatRequest) -> AsyncIterator[ChatChunk]: ...
 
+    async def embed(self, texts: Sequence[str], model: str) -> list[list[float]]: ...
+
     async def health(self) -> bool: ...
 
     async def aclose(self) -> None: ...
@@ -173,6 +175,32 @@ class LiteLLMTransport:
             raise ModelGatewayError(
                 "model gateway stream failed", model=request.model, detail=str(exc)
             ) from exc
+
+    async def embed(self, texts: Sequence[str], model: str) -> list[list[float]]:
+        """Vectors for a batch of texts, in the order given."""
+        if not texts:
+            return []
+        try:
+            response = await self._client.post(
+                "/v1/embeddings", json={"model": model, "input": list(texts)}
+            )
+            response.raise_for_status()
+            body = response.json()
+        except httpx.HTTPStatusError as exc:
+            raise ModelGatewayError(
+                "embedding backend rejected the request",
+                model=model,
+                status=exc.response.status_code,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ModelGatewayError(
+                "embedding backend unreachable", model=model, detail=str(exc)
+            ) from exc
+
+        data = body.get("data") or []
+        # Providers are not required to preserve request order; `index` is authoritative.
+        ordered = sorted(data, key=lambda item: int(item.get("index", 0)))
+        return [[float(x) for x in item.get("embedding", [])] for item in ordered]
 
     async def health(self) -> bool:
         try:
@@ -283,6 +311,23 @@ class GovernedGateway:
             )
         ):
             yield chunk
+
+    async def embed(
+        self,
+        texts: Sequence[str],
+        *,
+        classification: Classification,
+        preferred: Sequence[str] = ("local/embeddings",),
+    ) -> list[list[float]]:
+        """Embed text under the same sovereignty rules as any other model call.
+
+        Embedding is the leak that gets forgotten: the vector looks like noise but the
+        text that produced it was sensitive, and a hosted embedding endpoint sees the
+        text. Routing it through the policy closes that path by construction.
+        """
+        decision = self.route(classification, preferred, purpose="embedding")
+        self._policy.assert_allowed(decision.alias, classification)
+        return await self._transport.embed(texts, decision.alias)
 
     async def health(self) -> bool:
         return await self._transport.health()
