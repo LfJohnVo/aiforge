@@ -51,9 +51,25 @@ Paquetes previstos: `peak.knowledge`, `peak.tools`, `peak.models`, `peak.autonom
 | A3 | Acción sobre sistema de registro | **Aprobación de rol elevado** |
 | A4 | Acción irreversible o de alto impacto | **Doble aprobación** |
 
-El perfil declara `autonomy.default` y `autonomy.overrides` por categoría de acción. El
-nivel efectivo de una acción es el **máximo** entre el declarado por la tool
-(`ToolSpec.autonomy_min`), el del perfil y el que imponga el PDP.
+Hay **dos cantidades distintas** y confundirlas es la forma habitual de dejar un hueco:
+
+| Cantidad | Qué es | Cómo se combina |
+|---|---|---|
+| **Nivel requerido** por una acción | Cuánta autonomía exige *esa* acción | **Máximo** de: `ToolSpec.autonomy_min`, `autonomy.overrides[categoría]` del perfil, y lo que imponga el PDP. Ninguna capa puede bajarlo. |
+| **Nivel concedido** al solicitante | Cuánto puede ejercer *este* contexto sin intervención humana | **Mínimo**: por defecto A1 con identidad verificada; **A0 sin identidad**; el PDP sólo puede reducirlo. |
+
+Una acción se ejecuta sin aprobación humana únicamente si:
+
+```
+requerido < A2   Y   requerido <= concedido
+```
+
+La primera condición es la regla de gobernanza (A2+ siempre pasa por un humano). La
+segunda es la que impide que un solicitante anónimo ejecute siquiera una acción A1.
+
+En el código: `core/autonomy.py` (`resolve` = máximo, para requisitos),
+`GateOutcome.autonomy_granted` (la concesión) y el nodo `tools` de `core/graph.py`, que
+aplica la conjunción.
 
 ## 5. HITL
 

@@ -100,7 +100,21 @@ Cada rotación se registra en el ledger.
    `com.peak.evidence.record.v1` permiten reconstruir el rango.
 4. Escalar al responsable de cumplimiento antes de reanudar operaciones.
 
-## 7. Revisiones periódicas
+## 7. Desarrollo nativo en Windows
+
+El producto corre en contenedores Linux; el único punto donde Windows difiere es el
+driver async de Postgres. `psycopg` rechaza el `ProactorEventLoop` que Python usa por
+defecto en Windows.
+
+* La suite de tests lo resuelve sola (`tests/conftest.py` fuerza el selector loop).
+* Ejecutar `agent-api` nativamente en Windows **con checkpointer Postgres** requiere
+  arrancar uvicorn con `--loop asyncio` y una política de bucle selector, o simplemente
+  usar `make up`, que es la vía soportada.
+* Con `POSTGRES_DSN` sin definir la célula arranca con checkpointer en memoria y lo
+  advierte en el log: sirve para desarrollo, y una aprobación pendiente **no** sobrevive
+  a un reinicio.
+
+## 8. Revisiones periódicas
 
 | Qué | Cada |
 |---|---|

@@ -9,7 +9,7 @@ Reglas permanentes:
 - Un commit por unidad lógica; actualiza docs/memory/DECISIONS_LOG.md al cerrar cada fase.
 - Ante ambigüedad: decide, registra un ADR y continúa. No esperes confirmación.
 - En la Fase 0 expande este archivo según ordena el prompt, pero NUNCA borres este bloque de misión.
-- Estado actual: Fase 1 — Núcleo agéntico + canal base (F0 cerrada)
+- Estado actual: Fase 2 — Memoria (F0 y F1 cerradas)
 
 ---
 
@@ -48,6 +48,7 @@ src/agent_forge/
   observability/ otel.py logging.py metrics.py
   api/           app.py auth.py admin.py health.py
   profile/       modelo Pydantic del agent.profile.yaml
+  runtime.py     composition root: perfil + entorno -> celula lista
 configs/         agent.profile.example.yaml litellm.yaml policies/ prompts/
 deploy/compose/  docker-compose.yml + overrides por profile
 scripts/         repo_graph.py new_instance.py new_connector.py ingest.py verify_ledger.py
@@ -131,8 +132,8 @@ Dos restricciones que vienen de resolver el lockfile, no de preferencia:
 | Fase | Contenido | Estado |
 |---|---|---|
 | F0 | Fundación: scaffold, tooling, CI, docs, ADR-001..006 | **cerrada** |
-| F1 | Núcleo agéntico + canal OpenAI-compatible | **en curso** |
-| F2 | Memoria STM/LTM/episódica, caché semántica, olvido | pendiente |
+| F1 | Núcleo agéntico + canal OpenAI-compatible | **cerrada** |
+| F2 | Memoria STM/LTM/episódica, caché semántica, olvido | **en curso** |
 | F3 | Conocimiento: ingesta, RAG/CAG/GraphRAG, ACL | pendiente |
 | F4 | Conectores: registry, MCP client, n8n, OpenConnector, BDs | pendiente |
 | F5 | Upstream MCP/A2A/OpenAPI + canales restantes | pendiente |

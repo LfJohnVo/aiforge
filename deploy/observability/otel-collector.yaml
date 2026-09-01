@@ -1,0 +1,67 @@
+# OpenTelemetry Collector: single ingress for traces, metrics and logs.
+# The cell exports OTLP here; the collector fans out to Prometheus and Loki.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Bound the collector's memory before it becomes the thing that takes the host down.
+  memory_limiter:
+    check_interval: 2s
+    limit_percentage: 75
+    spike_limit_percentage: 20
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+  resourcedetection:
+    detectors: [env, system]
+    timeout: 2s
+  # Defence in depth: the application already refuses to log message content, but a
+  # future span attribute must not be able to leak it either.
+  attributes/scrub:
+    actions:
+      - key: prompt
+        action: delete
+      - key: messages
+        action: delete
+      - key: answer
+        action: delete
+      - key: content
+        action: delete
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, attributes/scrub, batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, attributes/scrub, batch]
+      exporters: [otlphttp/loki]
+  telemetry:
+    logs:
+      level: warn

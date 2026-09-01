@@ -79,3 +79,59 @@ vacío.
 **Siguiente:** F1 · núcleo agéntico (grafo LangGraph, estado tipado, checkpointer,
 autonomía A0–A4, HITL, subgrafos `generalist` e `it_support`) y canal
 OpenAI-compatible con streaming.
+
+---
+
+## 2026-09-01 · F1 · Núcleo agéntico + canal base
+
+### D-008 · Autonomía: separar el nivel *requerido* del nivel *concedido*
+**Contexto:** `resolve()` combina por máximo, que es correcto para el requisito de una
+acción (la tool, el perfil y el PDP sólo pueden endurecerlo). Aplicado también al techo
+del solicitante, hacía imposible que un usuario anónimo (A0) quedara por debajo del
+`autonomy.default` del perfil: podía ejecutar acciones A1.
+**Decisión:** son dos cantidades distintas. Requerido combina por **máximo**; concedido
+combina por **mínimo**. Una acción corre sin humano sólo si
+`requerido < A2 Y requerido <= concedido`.
+**Consecuencia:** `GateOutcome.autonomy_granted` sustituye a `autonomy_ceiling`.
+Documentado en `docs/GOVERNANCE.md` §4, con test de regresión.
+
+### D-009 · El transporte de modelos habla HTTP con el proxy, no importa el SDK
+**Alternativas:** importar `litellm` en proceso.
+**Razón:** pasar por el proxy da claves virtuales por tenant, budgets y registro de coste
+sin código propio, y mantiene la imagen de `agent-api` libre de SDKs de proveedores
+(coherente con ADR-005). Además hace que `GovernedGateway` sea la única puerta: ninguna
+capa puede alcanzar un backend sin pasar por la comprobación de soberanía.
+
+### D-010 · Los subgrafos no importan LangGraph
+**Razón:** materializa la mitigación de lock-in que promete el ADR-001. El contrato
+`DomainSubgraph` es una fachada (`DomainContext` / `DomainOutcome`); cambiar de runtime
+reescribiría `core/graph.py` y dejaría intacto cada plugin de dominio.
+
+### D-011 · `psycopg[binary,pool]` como dependencia del núcleo
+**Contexto:** `langgraph-checkpoint-postgres` declara `psycopg` pero no la rueda binaria,
+así que el checkpointer fallaba en tiempo de ejecución con `no pq wrapper available`.
+**Decisión:** fijarla explícitamente. La rueda binaria trae libpq, de modo que la imagen
+no necesita cliente de PostgreSQL del sistema.
+
+### D-012 · Nodos del grafo con `functools.partial`, no `lambda`
+**Razón:** LangGraph decide si esperar un nodo con `iscoroutinefunction`. Una lambda que
+devuelve una corrutina no lo es, y el grafo falla con `InvalidUpdateError`. `partial`
+sobre una función asíncrona sí se detecta correctamente.
+
+### Cierre de F1
+
+**Construido:** kernel de dominio (errores, clasificación, autonomía, estado, prompts),
+grafo LangGraph de ocho nodos con checkpointer y HITL, subgrafos `generalist` e
+`it_support`, model gateway con la invariante de soberanía, perfil Pydantic validado,
+canal OpenAI-compatible con SSE, `/admin/*`, `/health/*`, Dockerfile multi-stage y
+Compose con siete perfiles.
+
+**Verificado:** chat e2e con streaming real (`agent-api` → LiteLLM → Ollama `qwen3:0.6b`);
+HITL que pausa y reanuda por HTTP; reanudación tras descartar el proceso, contra Postgres
+real vía testcontainers. `make check` verde; cobertura `core` 84 %, `gateway` 98 %.
+
+**Siete bugs reales corregidos** durante la fase, detallados en la nota de sesión. Dos
+eran de seguridad: la autonomía concedida que no podía reducirse, y la pausa HITL que no
+llegaba a la cola (una acción A2 quedaba esperando a un humano que nunca la veía).
+
+**Siguiente:** F2 · memoria.

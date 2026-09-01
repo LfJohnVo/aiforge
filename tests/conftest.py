@@ -6,8 +6,9 @@ infrastructure belongs in ``tests/integration`` behind the ``integration`` marke
 
 from __future__ import annotations
 
+import asyncio
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -54,3 +55,14 @@ def sample_package(tmp_path: Path) -> Iterator[Path]:
         encoding="utf-8",
     )
     yield tmp_path
+
+
+def pytest_asyncio_loop_factories() -> dict[str, Callable[[], asyncio.AbstractEventLoop]]:
+    """Windows needs the selector loop for psycopg's async driver.
+
+    Only affects developers running the suite natively on Windows; the product itself
+    always runs in Linux containers. Documented in docs/RUNBOOK.md section 7.
+    """
+    if sys.platform == "win32":
+        return {"selector": asyncio.SelectorEventLoop}
+    return {"default": asyncio.new_event_loop}

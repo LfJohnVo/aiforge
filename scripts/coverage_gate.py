@@ -14,14 +14,21 @@ from pathlib import Path
 
 
 def package_coverage(report: Path, package: str) -> tuple[int, int]:
-    """Return (covered_lines, total_lines) for every file under ``package``."""
+    """Return (covered_lines, total_lines) for every file under ``package``.
+
+    ``coverage.xml`` records filenames relative to the configured ``<source>`` root, so a
+    gate on ``agent_forge/core`` has to be matched against source-plus-filename, not the
+    filename alone.
+    """
     tree = ET.parse(report)  # noqa: S314 - our own coverage report, not untrusted input
     needle = package.replace("\\", "/").strip("/")
+    roots = [(src.text or "").replace("\\", "/").rstrip("/") for src in tree.iter("source")] or [""]
     covered = 0
     total = 0
     for cls in tree.iter("class"):
-        filename = (cls.get("filename") or "").replace("\\", "/")
-        if needle not in filename:
+        relative = (cls.get("filename") or "").replace("\\", "/")
+        candidates = [relative, *(f"{root}/{relative}" for root in roots)]
+        if not any(needle in candidate for candidate in candidates):
             continue
         for line in cls.iter("line"):
             total += 1

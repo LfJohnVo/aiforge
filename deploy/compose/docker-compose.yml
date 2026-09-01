@@ -1,0 +1,382 @@
+# Agent Forge - local platform.
+#
+#   make up PROFILE=core            agent-api + postgres + redis + litellm + opa
+#   make up PROFILE=serving         ollama (dev) or vllm (see gpu.override.yml)
+#   make up PROFILE=knowledge       qdrant + neo4j + ingestion-worker
+#   make up PROFILE=events          nats
+#   make up PROFILE=observability   otel + prometheus + grafana + loki
+#   make up PROFILE=full            everything
+#
+# Rules applied to every service: real healthcheck, non-root, resource limits,
+# named volumes, segmented networks, restart unless-stopped. Ports bind to 127.0.0.1
+# only; production terminates TLS in a reverse proxy in front of agent-api.
+
+name: agent-forge-${AGENT_FORGE_INSTANCE:-default}
+
+x-common: &common
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-agent-env: &agent-env
+  AGENT_FORGE_PROFILE: ${AGENT_FORGE_PROFILE:-configs/agent.profile.example.yaml}
+  AGENT_FORGE_ENV: ${AGENT_FORGE_ENV:-development}
+  AGENT_FORGE_INSTANCE: ${AGENT_FORGE_INSTANCE:-default}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+  POSTGRES_DSN: postgresql://${POSTGRES_USER:-agentforge}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-agentforge}
+  REDIS_URL: redis://redis:6379/0
+  LITELLM_BASE_URL: http://litellm:4000
+  LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
+  QDRANT_URL: http://qdrant:6333
+  NEO4J_URI: bolt://neo4j:7687
+  NEO4J_USER: ${NEO4J_USER:-neo4j}
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:-}
+  NATS_URL: nats://nats:4222
+  GOVERNANCE_PDP_URL: http://opa:8181
+  GOVERNANCE_FAIL_MODE: ${GOVERNANCE_FAIL_MODE:-closed}
+  MCP_GATEWAY_URL: ${MCP_GATEWAY_URL:-}
+  N8N_URL: ${N8N_URL:-}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+  OTEL_SERVICE_NAME: agent-forge
+  LEDGER_PATH: /var/lib/agent-forge/ledger
+  AGENT_API_KEYS: ${AGENT_API_KEYS:-}
+  AGENT_API_CORS_ORIGINS: ${AGENT_API_CORS_ORIGINS:-}
+  OIDC_ISSUER: ${OIDC_ISSUER:-}
+  OIDC_AUDIENCE: ${OIDC_AUDIENCE:-agent-forge}
+  OIDC_JWKS_URL: ${OIDC_JWKS_URL:-}
+
+networks:
+  frontend:
+  backend:
+    internal: true
+  observability:
+
+volumes:
+  postgres-data:
+  redis-data:
+  qdrant-data:
+  neo4j-data:
+  nats-data:
+  ledger-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  ollama-models:
+
+services:
+  # ------------------------------------------------------------------ core
+  agent-api:
+    <<: *common
+    profiles: [core, full]
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile
+      target: api
+    image: agent-forge/api:${AGENT_FORGE_VERSION:-0.1.0}
+    environment: *agent-env
+    ports:
+      - "127.0.0.1:${AGENT_API_PORT:-8080}:8080"
+    volumes:
+      - ledger-data:/var/lib/agent-forge/ledger
+    networks: [frontend, backend]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      litellm: {condition: service_healthy}
+      opa: {condition: service_healthy}
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    deploy:
+      resources:
+        limits: {cpus: "2.0", memory: 2G}
+        reservations: {memory: 512M}
+
+  postgres:
+    <<: *common
+    profiles: [core, full]
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-agentforge}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agentforge} -d ${POSTGRES_DB:-agentforge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+
+  redis:
+    <<: *common
+    profiles: [core, full]
+    image: redis:8.8-alpine
+    command: >
+      redis-server --appendonly yes --maxmemory 512mb
+      --maxmemory-policy allkeys-lru --save 60 1000
+    volumes:
+      - redis-data:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 640M}
+
+  litellm:
+    <<: *common
+    profiles: [core, full]
+    image: ghcr.io/berriai/litellm:v1.99.0
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set LITELLM_SALT_KEY in .env}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agentforge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agentforge}
+      VLLM_BASE_URL: ${VLLM_BASE_URL:-http://vllm:8000/v1}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      STORE_MODEL_IN_DB: "True"
+    volumes:
+      - ../../configs/litellm.yaml:/app/config.yaml:ro
+    networks: [backend]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4).status==200 else 1)\""]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 40s
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+
+  opa:
+    <<: *common
+    profiles: [core, full]
+    image: openpolicyagent/opa:1.20.1-static
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --log-level=error
+      - --set=decision_logs.console=true
+      - /policies
+    volumes:
+      - ../../configs/policies:/policies:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "/opa", "version"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 256M}
+
+  # --------------------------------------------------------------- serving
+  ollama:
+    <<: *common
+    profiles: [serving, full]
+    image: ollama/ollama:0.33.2
+    volumes:
+      - ollama-models:/root/.ollama
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits: {cpus: "4.0", memory: 12G}
+
+  # ------------------------------------------------------------- knowledge
+  qdrant:
+    <<: *common
+    profiles: [knowledge, full]
+    image: qdrant/qdrant:v1.19.0
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "test -e /proc/net/tcp && grep -q ':18BD' /proc/net/tcp"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits: {cpus: "2.0", memory: 2G}
+
+  neo4j:
+    <<: *common
+    profiles: [knowledge, full]
+    image: neo4j:5.26.30-community
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512M
+    volumes:
+      - neo4j-data:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 40s
+    deploy:
+      resources:
+        limits: {cpus: "2.0", memory: 2G}
+
+  ingestion-worker:
+    <<: *common
+    profiles: [knowledge, full]
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile
+      target: worker
+    image: agent-forge/worker:${AGENT_FORGE_VERSION:-0.1.0}
+    environment:
+      <<: *agent-env
+      LOCAL_CORPUS_PATH: /data/corpus
+      GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
+      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
+    volumes:
+      - ${LOCAL_CORPUS_PATH:-../../data/corpus}:/data/corpus:ro
+    networks: [backend]
+    depends_on:
+      qdrant: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    cap_drop: [ALL]
+    deploy:
+      resources:
+        limits: {cpus: "2.0", memory: 4G}
+
+  # ------------------------------------------------------------------ events
+  nats:
+    <<: *common
+    profiles: [events, full]
+    image: nats:2.14.6-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - nats-data:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8222/healthz >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: {cpus: "0.5", memory: 256M}
+
+  # ----------------------------------------------------------- observability
+  otel-collector:
+    <<: *common
+    profiles: [observability, full]
+    image: otel/opentelemetry-collector-contrib:0.159.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ../observability/otel-collector.yaml:/etc/otel/config.yaml:ro
+    networks: [backend, observability]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:13133/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 512M}
+
+  prometheus:
+    <<: *common
+    profiles: [observability, full]
+    image: prom/prometheus:v3.14.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [observability, backend]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/healthy >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+
+  loki:
+    <<: *common
+    profiles: [observability, full]
+    image: grafana/loki:3.7.7
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ../observability/loki.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    networks: [observability]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ready >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+
+  grafana:
+    <<: *common
+    profiles: [observability, full]
+    image: grafana/grafana:13.0.7
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    networks: [observability]
+    depends_on:
+      prometheus: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: {cpus: "1.0", memory: 512M}

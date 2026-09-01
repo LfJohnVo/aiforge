@@ -30,6 +30,9 @@ dependencies = [
   "litellm==1.99.0",
   "redis==7.1.0",
   "asyncpg==0.31.0",
+  # langgraph-checkpoint-postgres speaks psycopg3; the binary wheel ships libpq so
+  # the image needs no system postgres client.
+  "psycopg[binary,pool]==3.3.5",
   "nats-py==2.15.0",
   "cloudevents==2.2.0",
   "mcp==2.1.1",
@@ -195,7 +198,8 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-addopts = "-q --strict-markers"
+addopts = "-q --strict-markers --import-mode=importlib"
+pythonpath = ["."]
 markers = [
   "integration: requires live infrastructure (docker compose profile)",
   "e2e: full stack end-to-end",
