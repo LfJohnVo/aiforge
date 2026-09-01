@@ -46,6 +46,21 @@ model_list:
         sovereignty: local
         max_classification: C4
 
+  # Modelo de humo. No sirve para dar respuestas utiles y no pretende hacerlo: existe
+  # para que `make up PROFILE=serving` sea comprobable en cualquier maquina. En CPU,
+  # qwen3:8b tarda minutos en la primera peticion y agota el timeout del gateway, asi que
+  # un arranque limpio parecia roto cuando lo unico que pasaba era que el modelo cargaba.
+  # Medido: 522 MB frente a 5.2 GB.
+  - model_name: local/tiny
+    litellm_params:
+      model: ollama_chat/qwen3:0.6b
+      api_base: os.environ/OLLAMA_BASE_URL
+    model_info:
+      mode: chat
+      metadata:
+        sovereignty: local
+        max_classification: C4
+
   # Embeddings y rerank: SIEMPRE locales. Enviar contenido C2+ a un servicio
   # externo de embeddings es la fuga que mas facil se pasa por alto.
   - model_name: local/embeddings

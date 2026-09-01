@@ -1,0 +1,11 @@
+{{- if not .Values.profile.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-forge.configMapName" . }}
+  labels: {{- include "agent-forge.labels" . | nindent 4 }}
+data:
+  # El mismo perfil que en Compose. Si divergen, uno de los dos esta sin probar.
+  agent.profile.yaml: |
+{{ toYaml .Values.profile.content | indent 4 }}
+{{- end }}

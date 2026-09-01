@@ -27,6 +27,7 @@ from agent_forge.knowledge.documents import Chunk, RetrievalResult
 from agent_forge.knowledge.rag.embeddings import Embeddings
 from agent_forge.knowledge.rag.vector_store import VectorStore
 from agent_forge.observability.logging import get_logger
+from agent_forge.observability.metrics import get_metrics
 
 log = get_logger(__name__)
 
@@ -447,6 +448,9 @@ class HybridRetriever:
         )
         # Merge rather than splat both: `ceiling` appears in each, and duplicate
         # keywords are a TypeError, not a silent overwrite.
+        get_metrics().retrieval_results.labels(tenant=access.tenant_id).observe(
+            self.last_report.returned
+        )
         log.info("knowledge.retrieved", **{**access.describe(), **self.last_report.to_dict()})
         return final
 

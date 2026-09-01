@@ -1,0 +1,22 @@
+{{- if .Values.ledger.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agent-forge.fullname" . }}-ledger
+  labels: {{- include "agent-forge.labels" . | nindent 4 }}
+  annotations:
+    # La cadena de evidencia sobrevive al release: borrarla con `helm uninstall` seria
+    # destruir la pista de auditoria de todo lo que la celula hizo.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    # ReadWriteOnce a proposito. Dos procesos escribiendo la misma cadena la bifurcan, y
+    # una cadena bifurcada falla la verificacion igual que una manipulada.
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.ledger.size }}
+  {{- if .Values.ledger.storageClass }}
+  storageClassName: {{ .Values.ledger.storageClass }}
+  {{- end }}
+{{- end }}

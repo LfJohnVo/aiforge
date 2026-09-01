@@ -22,6 +22,7 @@ at-least-once delivery survivable:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -37,13 +38,30 @@ from agent_forge.observability.logging import get_logger
 
 log = get_logger(__name__)
 
-__all__ = ["STREAM_NAME", "NatsBus"]
+__all__ = ["STREAM_NAME", "BrokerUnavailableError", "NatsBus"]
+
+
+class BrokerUnavailableError(ConnectionError):
+    """The broker is configured but not reachable.
+
+    Its own type so a caller can tell "the fabric is down" from "the message was rejected".
+    The first is a degradation the cell rides out; the second is a defect.
+    """
+
 
 STREAM_NAME = "PEAK"
 DLQ_STREAM_NAME = "PEAK_DLQ"
 # Long enough for a slow judge, short enough that a stuck consumer is noticed.
 ACK_WAIT_SECONDS = 60.0
 MAX_AGE_SECONDS = 7 * 24 * 3600
+# Connecting must FAIL, not hang. `nats.connect` defaults to retrying for ever, and a
+# broker that is configured but absent -- a `core` profile with NATS_URL still set, a DNS
+# entry that has not propagated -- then blocks the first publish, which happens inside a
+# request. Observed exactly that: the cell answered nothing while the client retried DNS
+# every four seconds. Bounded here, and the failure is reported.
+CONNECT_TIMEOUT_SECONDS = 3
+CONNECT_ATTEMPTS = 2
+PUBLISH_TIMEOUT_SECONDS = 5.0
 
 
 class NatsBus:
@@ -63,17 +81,46 @@ class NatsBus:
         self._js: Any = None
         self._seen = SeenEvents()
         self._subscriptions: list[Any] = []
+        # Set once a connect attempt has failed, so the next publish does not pay the
+        # timeout again. A cell whose broker is down must degrade, not slow down.
+        self._unreachable = False
 
     # ---------------------------------------------------------------- lifecycle
 
     async def connect(self) -> None:
-        """Connect and declare the streams. Idempotent."""
+        """Connect and declare the streams. Idempotent, bounded, and it can give up.
+
+        Raises ``BrokerUnavailableError`` rather than blocking. The caller decides what an
+        absent broker means: for the ledger it means "the local chain is still the source
+        of truth"; for the aggregator it means the platform will not hear about this task.
+        Neither of those is a reason to stall a user's request.
+        """
         if self._nc is not None:
             return
+        if self._unreachable:
+            raise BrokerUnavailableError(
+                f"{_safe(self._url)} was unreachable on a previous attempt"
+            )
+
         import nats
         from nats.js.api import RetentionPolicy, StreamConfig
 
-        self._nc = await nats.connect(self._url, name=self._source)
+        try:
+            self._nc = await nats.connect(
+                self._url,
+                name=self._source,
+                connect_timeout=CONNECT_TIMEOUT_SECONDS,
+                max_reconnect_attempts=CONNECT_ATTEMPTS,
+                allow_reconnect=True,
+            )
+        except Exception as exc:
+            self._unreachable = True
+            log.warning(
+                "nats.unreachable",
+                url=_safe(self._url),
+                detail=f"{type(exc).__name__}: {exc}"[:200],
+            )
+            raise BrokerUnavailableError(str(exc)[:200]) from exc
         self._js = self._nc.jetstream()
 
         for name, subjects in (
@@ -114,7 +161,10 @@ class NatsBus:
         payload = event.model_dump_json().encode()
         # `Nats-Msg-Id` is what makes the publish itself idempotent: a retry after a
         # timeout that actually succeeded does not produce a second message.
-        await self._js.publish(subject, payload, headers={"Nats-Msg-Id": event.id})
+        await asyncio.wait_for(
+            self._js.publish(subject, payload, headers={"Nats-Msg-Id": event.id}),
+            timeout=PUBLISH_TIMEOUT_SECONDS,
+        )
         log.debug("nats.published", subject=subject, event_id=event.id, type=event.type)
 
     # ---------------------------------------------------------------- subscribe

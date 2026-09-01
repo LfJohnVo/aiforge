@@ -64,7 +64,7 @@ class GovernanceService:
     async def gate(self, state: AgentState) -> GateOutcome:
         """The entry gate: scan the user's text, then decide what they may reach."""
         question = state.last_user_message
-        scan = self.dlp.scan(question, "input")
+        scan = self.dlp.scan(question, "input", tenant_id=state.identity.tenant_id)
         if scan.blocked:
             await self._record("policy_decision", state, allow=False, reasons=scan.reasons())
             return GateOutcome(
@@ -178,9 +178,9 @@ class GovernanceService:
 
     # ------------------------------------------------------------------- output
 
-    def scan_answer(self, text: str) -> DlpResult:
+    def scan_answer(self, text: str, *, tenant_id: str = "") -> DlpResult:
         """Outbound scan. A secret here was already inside the tenant's corpus."""
-        return self.dlp.scan(text, "output")
+        return self.dlp.scan(text, "output", tenant_id=tenant_id)
 
     async def aclose(self) -> None:
         await self.local.aclose()

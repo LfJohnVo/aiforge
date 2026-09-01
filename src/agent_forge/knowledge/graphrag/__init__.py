@@ -441,13 +441,36 @@ def _result_from_record(record: Any) -> RetrievalResult:
 
 
 def build_graph_store(
-    uri: str = "", user: str = "", password: str = "", *, enabled: bool = True
+    uri: str = "",
+    user: str = "",
+    password: str = "",
+    *,
+    enabled: bool = True,
+    strict: bool = False,
 ) -> GraphStore | None:
-    """Neo4j when configured and enabled, in-process otherwise, None when disabled."""
+    """Neo4j when configured, enabled and installed; in-process otherwise; None when off.
+
+    ``strict`` mirrors ``check_capabilities``: fatal in production, a degradation in
+    development. Same reasoning as the vector store -- the API image carries no
+    `knowledge` extra by design (ADR-005), and without this the `core` profile cannot boot
+    against a profile with GraphRAG enabled.
+    """
     if not enabled:
         return None
     if uri and password:
-        return Neo4jGraphStore(uri, user or "neo4j", password)
+        try:
+            return Neo4jGraphStore(uri, user or "neo4j", password)
+        except GraphStoreError:
+            if strict:
+                raise
+            log.warning(
+                "graph_store.extra_missing",
+                detail=(
+                    "NEO4J_URI is set but the `knowledge` extra is not installed; "
+                    "falling back to the in-process graph. Nothing is written to Neo4j."
+                ),
+            )
+            return InMemoryGraphStore()
     log.warning(
         "graph_store.in_memory_selected",
         detail="NEO4J_URI/NEO4J_PASSWORD not set; the graph is lost on restart",

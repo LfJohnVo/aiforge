@@ -1,0 +1,32 @@
+apiVersion: v2
+name: agent-forge
+description: >-
+  Una celula de agente PEAK: agente, subgrafo de dominio, memoria, conocimiento y
+  drivers. Un release del chart es una instancia; el aislamiento entre tenants lo da el
+  perfil, no el namespace.
+type: application
+
+# La version del chart es independiente de la de la aplicacion a proposito: un cambio de
+# plantilla no es una version nueva de la celula, y al reves tampoco.
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - agent
+  - llm
+  - rag
+  - peak
+
+home: https://silent4business.com
+sources:
+  - https://github.com/silent4business/agent-forge
+
+maintainers:
+  - name: Silent4Business
+
+annotations:
+  # El chart NO empaqueta Postgres, Redis, Qdrant, Neo4j ni NATS. En Compose se levantan
+  # por comodidad de desarrollo; en Kubernetes son servicios gestionados o charts propios
+  # con su propio ciclo de respaldo, y meterlos aqui como subcharts convertiria un
+  # `helm upgrade` de la celula en un riesgo para los datos.
+  agent-forge/dependencies: external

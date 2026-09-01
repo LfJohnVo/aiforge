@@ -15,6 +15,11 @@ name: agent-forge-${AGENT_FORGE_INSTANCE:-default}
 
 x-common: &common
   restart: unless-stopped
+  # Every container drops every capability by default. The few images that genuinely need
+  # one add it back explicitly and say why -- which is the point: an image that needs
+  # CAP_CHOWN should have to declare it, not inherit it because nobody looked.
+  cap_drop:
+    - ALL
   security_opt:
     - no-new-privileges:true
   logging:
@@ -101,6 +106,11 @@ services:
 
   postgres:
     <<: *common
+    # Verified by booting it with ALL dropped: the entrypoint chowns /var/lib/postgresql
+    # and chmods /var/run/postgresql as root before stepping down to the postgres user,
+    # and without these it crash-loops on "Operation not permitted". These four are what
+    # that needs and nothing more.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     profiles: [core, full]
     image: postgres:18.6-alpine
     environment:
@@ -109,7 +119,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-agentforge}
       POSTGRES_INITDB_ARGS: "--data-checksums"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # postgres:18+ stores data in major-version-specific directories under
+      # /var/lib/postgresql and REFUSES TO START if it finds a mount at the old
+      # /var/lib/postgresql/data -- it reads it as an un-upgraded cluster. Verified by
+      # booting it: the container crash-loops with a message about pg_ctlcluster.
+      - postgres-data:/var/lib/postgresql
     networks: [backend]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agentforge} -d ${POSTGRES_DB:-agentforge}"]
@@ -123,6 +137,10 @@ services:
 
   redis:
     <<: *common
+    # Same shape as postgres: the entrypoint fixes ownership of the append-only directory
+    # before dropping privileges. Without CHOWN it fails with "Can't open or create
+    # append-only dir".
+    cap_add: [CHOWN, SETGID, SETUID]
     profiles: [core, full]
     image: redis:8.8-alpine
     command: >
@@ -234,6 +252,10 @@ services:
 
   neo4j:
     <<: *common
+    # Same pattern as postgres and redis, verified the same way: the entrypoint chowns
+    # /var/lib/neo4j and its config before dropping to the neo4j user, and without CHOWN
+    # it crash-loops on "Operation not permitted".
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     profiles: [knowledge, full]
     image: neo4j:5.26.30-community
     environment:
@@ -305,11 +327,11 @@ services:
     volumes:
       - ../observability/otel-collector.yaml:/etc/otel/config.yaml:ro
     networks: [backend, observability]
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:13133/ >/dev/null || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+    # No healthcheck: this image is distroless -- no shell, no wget, no curl -- so any
+    # in-container probe fails on `exec: "/bin/sh": no such file`, and the container stays
+    # `unhealthy` for ever. Verified by running it. The collector's own health_check
+    # extension is up on :13133 and Prometheus scrapes it; that is where its health is
+    # visible, and it is a better place for it than a probe that cannot execute.
     deploy:
       resources:
         limits: {cpus: "1.0", memory: 512M}
@@ -344,12 +366,8 @@ services:
       - ../observability/loki.yaml:/etc/loki/config.yaml:ro
       - loki-data:/loki
     networks: [observability]
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ready >/dev/null || exit 1"]
-      interval: 20s
-      timeout: 5s
-      retries: 6
-      start_period: 30s
+    # Distroless, same as the collector: an in-container probe cannot execute. Loki
+    # exposes /ready on :3100 and Prometheus scrapes it.
     deploy:
       resources:
         limits: {cpus: "1.0", memory: 1G}

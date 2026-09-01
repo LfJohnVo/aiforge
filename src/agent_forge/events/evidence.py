@@ -29,6 +29,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from agent_forge.events.schemas import EVIDENCE_RECORD, CloudEvent, EvidenceRecordData
 from agent_forge.observability.logging import get_logger
+from agent_forge.observability.metrics import get_metrics
 
 log = get_logger(__name__)
 
@@ -284,6 +285,7 @@ class EvidenceLedger:
             )
             await self._sink.append(record)
             self._heads[tenant_id] = (record.seq, record.hash)
+        get_metrics().ledger_entries.labels(tenant=tenant_id, action=action).inc()
 
         if self._bus is not None:
             # Asynchronous by contract: the central Audit Ledger being unavailable must

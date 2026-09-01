@@ -1,0 +1,46 @@
+{{- if .Values.ingestion.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "agent-forge.fullname" . }}-ingestion
+  labels: {{- include "agent-forge.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.ingestion.schedule | quote }}
+  # Nunca dos ingestas a la vez: la segunda reindexaria lo que la primera esta
+  # escribiendo, y el resultado depende de quien termine antes.
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels: {{- include "agent-forge.selectorLabels" . | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          securityContext: {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: ingestion
+              image: {{ include "agent-forge.image" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              securityContext: {{- toYaml .Values.securityContext | nindent 16 }}
+              command: ["python", "scripts/ingest.py"]
+              args: ["--profile", "/app/configs/agent.profile.yaml"]
+              env: {{- include "agent-forge.env" . | nindent 16 }}
+              resources: {{- toYaml .Values.ingestion.resources | nindent 16 }}
+              volumeMounts:
+                - name: profile
+                  mountPath: /app/configs/agent.profile.yaml
+                  subPath: agent.profile.yaml
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: profile
+              configMap:
+                name: {{ include "agent-forge.configMapName" . }}
+            - name: tmp
+              emptyDir:
+                sizeLimit: 1Gi
+{{- end }}

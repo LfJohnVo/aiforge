@@ -1,0 +1,14 @@
+{{- if .Values.observability.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "agent-forge.fullname" . }}
+  labels: {{- include "agent-forge.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "agent-forge.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.observability.serviceMonitor.interval }}
+{{- end }}

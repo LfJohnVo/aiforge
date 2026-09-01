@@ -92,8 +92,22 @@ class Aggregator:
     handled: list[str] = field(default_factory=list, init=False)
 
     async def publish_result(self, state: Any, *, agent_id: str = "") -> CloudEvent:
+        """Publish the result, and record it locally whether or not the fabric took it.
+
+        A broker that is down must not fail the task. The aggregator will not hear about
+        this one -- which is worth an error in the log, because someone upstream is
+        waiting -- but the answer already went to the user and the evidence is still
+        written.
+        """
         event = result_event(state, source=self.source, agent_id=agent_id)
-        await self.bus.publish(event)
+        try:
+            await self.bus.publish(event)
+        except Exception as exc:
+            log.error(
+                "aggregator.publish_failed",
+                task_id=state.task_id,
+                detail=f"{type(exc).__name__}: {exc}"[:200],
+            )
         if self.ledger is not None:
             await self.ledger.record(
                 "task_result",

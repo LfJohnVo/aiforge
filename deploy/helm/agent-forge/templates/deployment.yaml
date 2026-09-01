@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agent-forge.fullname" . }}
+  labels: {{- include "agent-forge.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "agent-forge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "agent-forge.labels" . | nindent 8 }}
+      annotations:
+        # Un cambio de perfil reinicia los pods. Sin esto, `helm upgrade` actualiza el
+        # ConfigMap y los pods siguen sirviendo con el perfil viejo hasta que algo los
+        # reinicie por otro motivo -- que es la clase de deriva que nadie relaciona con
+        # el despliegue que la causo.
+        checksum/profile: {{ toYaml .Values.profile | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: agent-api
+          image: {{ include "agent-forge.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env: {{- include "agent-forge.env" . | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: profile
+              mountPath: /app/configs/agent.profile.yaml
+              subPath: agent.profile.yaml
+              readOnly: true
+            {{- if .Values.ledger.enabled }}
+            - name: ledger
+              mountPath: {{ .Values.ledger.mountPath }}
+            {{- end }}
+            # `readOnlyRootFilesystem: true` deja el proceso sin sitio donde escribir, y
+            # hay librerias que necesitan uno. Un emptyDir acotado es mas seguro que
+            # abrir el sistema de ficheros entero.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: profile
+          configMap:
+            name: {{ include "agent-forge.configMapName" . }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        {{- if .Values.ledger.enabled }}
+        - name: ledger
+          persistentVolumeClaim:
+            claimName: {{ include "agent-forge.fullname" . }}-ledger
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

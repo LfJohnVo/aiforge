@@ -22,6 +22,7 @@ from agent_forge.core.autonomy import AutonomyLevel
 from agent_forge.core.errors import ApprovalError
 from agent_forge.core.state import ApprovalRequest
 from agent_forge.observability.logging import get_logger
+from agent_forge.observability.metrics import get_metrics
 
 log = get_logger(__name__)
 
@@ -127,6 +128,19 @@ class InMemoryApprovalStore(ApprovalStore):
 
     async def update(self, pending: PendingApproval) -> None:
         self._items[(pending.tenant_id, pending.request.id)] = pending
+        self._publish(pending.tenant_id)
+
+    def _publish(self, tenant_id: str) -> None:
+        """Keep the queue depth gauge honest.
+
+        Recomputed from the queue rather than incremented and decremented: a counter that
+        drifts leaves an alert firing about approvals nobody has, and the fix is then to
+        restart the process, which is not a fix.
+        """
+        waiting = sum(
+            1 for (t, _), p in self._items.items() if t == tenant_id and p.request.is_pending
+        )
+        get_metrics().hitl_pending.labels(tenant=tenant_id).set(waiting)
 
 
 def build_request(

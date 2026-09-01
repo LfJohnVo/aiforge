@@ -26,6 +26,9 @@ jobs:
           path: .
           format: cyclonedx-json
           artifact-name: sbom.cyclonedx.json
+          # `.venv` is not present in CI, but the exclusions are kept in step with the
+          # Makefile so a local `make sbom` and this step describe the same thing.
+          upload-artifact-retention: 30
 
   vulnerabilities:
     name: no CRITICAL vulnerabilities
@@ -44,6 +47,11 @@ jobs:
           format: sarif
           output: trivy.sarif
           severity: LOW,MEDIUM,HIGH,CRITICAL
+          # Without the skips and the raised timeout, secret scanning walks `.git` past
+          # trivy's 5-minute default and the step dies on a context deadline rather than
+          # on a finding. Measured locally before it was written here.
+          skip-dirs: .venv,node_modules,var,.git
+          timeout: 30m
 
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
@@ -60,6 +68,8 @@ jobs:
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          skip-dirs: .venv,node_modules,var,.git
+          timeout: 30m
 
   secrets:
     name: no secrets in history

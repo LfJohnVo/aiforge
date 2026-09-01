@@ -128,10 +128,14 @@ memory:
 # ------------------------------------------------------------------------------
 connectors:
   mcp_gateway:
-    url: "${MCP_GATEWAY_URL}"
+    # Vacio = sin MCP Gateway. La celula arranca igual y expone el resto de tools;
+    # exigirlo aqui impedia arrancar una celula que no lo usa.
+    url: "${MCP_GATEWAY_URL:-}"
     allowlist: ["jira.*", "graph_api.read_*"]
   n8n:
-    url: "${N8N_URL}"
+    # Vacio = sin n8n. La ruta de callback tampoco se monta, porque una puerta de
+    # entrada sin nada detras es superficie de ataque a cambio de nada.
+    url: "${N8N_URL:-}"
     workflows: ["facturas-ocr"]
   databases:
     - type: postgres
@@ -173,7 +177,9 @@ events:
 # Observabilidad
 # ------------------------------------------------------------------------------
 observability:
-  otel_endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+  # Vacio = sin colector. No se instala exportador y span() no hace nada, de modo que
+  # un portatil ejecuta el mismo codigo instrumentado que un cluster.
+  otel_endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
   langfuse: { enabled: true }
   metrics: { enabled: true }
 

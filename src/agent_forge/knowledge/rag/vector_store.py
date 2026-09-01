@@ -312,11 +312,38 @@ class QdrantVectorStore:
 
 
 def build_vector_store(
-    url: str = "", *, api_key: str = "", collection: str = DEFAULT_COLLECTION
+    url: str = "",
+    *,
+    api_key: str = "",
+    collection: str = DEFAULT_COLLECTION,
+    strict: bool = False,
 ) -> VectorStore:
-    """Qdrant when configured, in-memory otherwise -- and say which."""
+    """Qdrant when configured and installed, in-memory otherwise -- and say which.
+
+    ``strict`` mirrors ``check_capabilities``: in production a missing extra is fatal,
+    because a cell that claims to do RAG and silently does not is worse than one that
+    refuses to start. In development it degrades, which is what makes the `core` profile
+    -- whose API image deliberately carries no `knowledge` extra (ADR-005) -- able to boot
+    against a profile that has RAG switched on.
+
+    Before this, the capability check warned and the builder raised, so the two disagreed
+    and the cell refused to start on the exact path the check said was fine.
+    """
     if url:
-        return QdrantVectorStore(url, api_key=api_key, collection=collection)
+        try:
+            return QdrantVectorStore(url, api_key=api_key, collection=collection)
+        except VectorStoreError:
+            if strict:
+                raise
+            log.warning(
+                "vector_store.extra_missing",
+                detail=(
+                    "QDRANT_URL is set but the `knowledge` extra is not installed; "
+                    "falling back to the in-memory store. The corpus is lost on restart "
+                    "and nothing is written to Qdrant."
+                ),
+            )
+            return InMemoryVectorStore(collection)
     log.warning(
         "vector_store.in_memory_selected",
         detail="QDRANT_URL is not set; the corpus is lost on restart",

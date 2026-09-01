@@ -28,6 +28,7 @@ import yaml
 
 from agent_forge.memory.scrubbing import Scrubber
 from agent_forge.observability.logging import get_logger
+from agent_forge.observability.metrics import get_metrics
 
 log = get_logger(__name__)
 
@@ -161,7 +162,7 @@ class DlpEngine:
         """A no-op engine, for a profile that turns DLP off."""
         return cls(rules=(), scrubber=None)
 
-    def scan(self, text: str, direction: Direction = "input") -> DlpResult:
+    def scan(self, text: str, direction: Direction = "input", *, tenant_id: str = "") -> DlpResult:
         """Apply every rule for this direction, then PII.
 
         Order matters: a blocking rule short-circuits, because there is no point
@@ -185,6 +186,12 @@ class DlpEngine:
                 )
             )
             if rule.action == "block":
+                get_metrics().dlp_findings.labels(
+                    tenant=tenant_id or "_",
+                    rule=rule.id,
+                    direction=direction,
+                    action="block",
+                ).inc()
                 log.warning(
                     "dlp.blocked", rule=rule.id, direction=direction, severity=str(rule.severity)
                 )
@@ -203,6 +210,21 @@ class DlpEngine:
                 working = result.text
 
         if matches or pii_kinds:
+            metrics = get_metrics()
+            for match in matches:
+                metrics.dlp_findings.labels(
+                    tenant=tenant_id or "_",
+                    rule=match.rule_id,
+                    direction=direction,
+                    action=match.action,
+                ).inc()
+            for kind in pii_kinds:
+                metrics.dlp_findings.labels(
+                    tenant=tenant_id or "_",
+                    rule=f"pii:{kind}",
+                    direction=direction,
+                    action="redact",
+                ).inc()
             log.info(
                 "dlp.scanned",
                 direction=direction,
@@ -211,8 +233,10 @@ class DlpEngine:
             )
         return DlpResult(text=working, matches=tuple(matches), pii_kinds=pii_kinds)
 
-    def scan_all(self, texts: Iterable[str], direction: Direction = "input") -> list[DlpResult]:
-        return [self.scan(text, direction) for text in texts]
+    def scan_all(
+        self, texts: Iterable[str], direction: Direction = "input", *, tenant_id: str = ""
+    ) -> list[DlpResult]:
+        return [self.scan(text, direction, tenant_id=tenant_id) for text in texts]
 
     @property
     def enabled(self) -> bool:

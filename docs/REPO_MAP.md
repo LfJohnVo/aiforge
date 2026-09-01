@@ -5,17 +5,17 @@
 
 ## Resumen
 
-- Módulos Python: **142**
-- Líneas de código: **31236**
-- Clases: **275** · Funciones y métodos de nivel superior: **1002**
+- Módulos Python: **144**
+- Líneas de código: **32076**
+- Clases: **276** · Funciones y métodos de nivel superior: **1040**
 - Dependencias externas importadas directamente: **52**
 
 ## Dependencias entre paquetes
 
 ```mermaid
 flowchart LR
-  evals_synthetic["evals/synthetic<br/>158 loc"]
-  scripts["scripts<br/>1425 loc"]
+  evals_synthetic["evals/synthetic<br/>156 loc"]
+  scripts["scripts<br/>1709 loc"]
   src_agent_forge["src/agent_forge<br/>567 loc"]
   src_agent_forge_api["src/agent_forge/api<br/>943 loc"]
   src_agent_forge_channels["src/agent_forge/channels<br/>101 loc"]
@@ -28,23 +28,23 @@ flowchart LR
   src_agent_forge_connectors_mcp_client["src/agent_forge/connectors/mcp_client<br/>318 loc"]
   src_agent_forge_connectors_n8n["src/agent_forge/connectors/n8n<br/>272 loc"]
   src_agent_forge_connectors_openconnector["src/agent_forge/connectors/openconnector<br/>288 loc"]
-  src_agent_forge_core["src/agent_forge/core<br/>2275 loc"]
+  src_agent_forge_core["src/agent_forge/core<br/>2292 loc"]
   src_agent_forge_core_subgraphs["src/agent_forge/core/subgraphs<br/>216 loc"]
   src_agent_forge_core_subgraphs_generalist["src/agent_forge/core/subgraphs/generalist<br/>58 loc"]
   src_agent_forge_core_subgraphs_it_support["src/agent_forge/core/subgraphs/it_support<br/>159 loc"]
-  src_agent_forge_evals["src/agent_forge/evals<br/>891 loc"]
-  src_agent_forge_events["src/agent_forge/events<br/>1248 loc"]
+  src_agent_forge_evals["src/agent_forge/evals<br/>880 loc"]
+  src_agent_forge_events["src/agent_forge/events<br/>1313 loc"]
   src_agent_forge_events_schemas["src/agent_forge/events/schemas<br/>136 loc"]
   src_agent_forge_gateway["src/agent_forge/gateway<br/>728 loc"]
-  src_agent_forge_governance["src/agent_forge/governance<br/>984 loc"]
-  src_agent_forge_knowledge["src/agent_forge/knowledge<br/>948 loc"]
+  src_agent_forge_governance["src/agent_forge/governance<br/>1010 loc"]
+  src_agent_forge_knowledge["src/agent_forge/knowledge<br/>951 loc"]
   src_agent_forge_knowledge_cag["src/agent_forge/knowledge/cag<br/>137 loc"]
-  src_agent_forge_knowledge_graphrag["src/agent_forge/knowledge/graphrag<br/>456 loc"]
+  src_agent_forge_knowledge_graphrag["src/agent_forge/knowledge/graphrag<br/>479 loc"]
   src_agent_forge_knowledge_ingestion["src/agent_forge/knowledge/ingestion<br/>185 loc"]
-  src_agent_forge_knowledge_rag["src/agent_forge/knowledge/rag<br/>1046 loc"]
+  src_agent_forge_knowledge_rag["src/agent_forge/knowledge/rag<br/>1077 loc"]
   src_agent_forge_knowledge_sources["src/agent_forge/knowledge/sources<br/>469 loc"]
-  src_agent_forge_memory["src/agent_forge/memory<br/>1864 loc"]
-  src_agent_forge_observability["src/agent_forge/observability<br/>838 loc"]
+  src_agent_forge_memory["src/agent_forge/memory<br/>1867 loc"]
+  src_agent_forge_observability["src/agent_forge/observability<br/>836 loc"]
   src_agent_forge_profile["src/agent_forge/profile<br/>570 loc"]
   src_agent_forge_upstream["src/agent_forge/upstream<br/>310 loc"]
   src_agent_forge_upstream_a2a["src/agent_forge/upstream/a2a<br/>238 loc"]
@@ -53,7 +53,7 @@ flowchart LR
   tests["tests<br/>488 loc"]
   tests_integration["tests/integration<br/>822 loc"]
   tests_policies["tests/policies<br/>484 loc"]
-  tests_unit["tests/unit<br/>7505 loc"]
+  tests_unit["tests/unit<br/>7908 loc"]
   tests_unit_connectors["tests/unit/connectors<br/>1417 loc"]
   tests_unit -->|51| src_agent_forge_core
   tests_unit -->|18| tests
@@ -64,12 +64,12 @@ flowchart LR
   src_agent_forge_memory -->|9| src_agent_forge_core
   src_agent_forge_api -->|8| src_agent_forge_core
   src_agent_forge_knowledge -->|8| src_agent_forge_core
-  src_agent_forge_memory -->|7| src_agent_forge_observability
+  src_agent_forge_memory -->|8| src_agent_forge_observability
+  src_agent_forge_core -->|7| src_agent_forge_observability
+  src_agent_forge_events -->|7| src_agent_forge_observability
   src_agent_forge -->|7| src_agent_forge_core
   tests_integration -->|7| src_agent_forge_core
   tests_unit -->|7| src_agent_forge_governance
-  src_agent_forge_core -->|6| src_agent_forge_observability
-  src_agent_forge_events -->|6| src_agent_forge_observability
   src_agent_forge_knowledge_rag -->|6| src_agent_forge_core
   tests_unit_connectors -->|6| src_agent_forge_connectors
   src_agent_forge_api -->|5| src_agent_forge_observability
@@ -78,6 +78,8 @@ flowchart LR
   src_agent_forge_api -->|4| src_agent_forge
   src_agent_forge_connectors -->|4| src_agent_forge_observability
   src_agent_forge_gateway -->|4| src_agent_forge_core
+  src_agent_forge_governance -->|4| src_agent_forge_observability
+  src_agent_forge_knowledge_rag -->|4| src_agent_forge_observability
   src_agent_forge_knowledge_rag -->|4| src_agent_forge_knowledge
   tests_unit -->|4| src_agent_forge_core_subgraphs
   tests_unit -->|4| src_agent_forge_events
@@ -95,9 +97,7 @@ flowchart LR
   src_agent_forge_evals -->|3| src_agent_forge_core
   src_agent_forge_evals -->|3| src_agent_forge_observability
   src_agent_forge_gateway -->|3| src_agent_forge_observability
-  src_agent_forge_governance -->|3| src_agent_forge_observability
   src_agent_forge_knowledge -->|3| src_agent_forge_observability
-  src_agent_forge_knowledge_rag -->|3| src_agent_forge_observability
   src_agent_forge_profile -->|3| src_agent_forge_core
   src_agent_forge_upstream_mcp_server -->|3| src_agent_forge_core
   tests_policies -->|3| src_agent_forge_governance
@@ -242,7 +242,7 @@ flowchart LR
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`generate.py`](../evals/synthetic/generate.py) | Generate eval cases from a tenant's own ingested corpus. | 158 | `parse_args`, `generate`, `_sample_chunks`, `_ask_for_a_question`, `main` |
+| [`generate.py`](../evals/synthetic/generate.py) | Generate eval cases from a tenant's own ingested corpus. | 156 | `parse_args`, `generate`, `_sample_chunks`, `_ask_for_a_question`, `main` |
 
 ### `scripts`
 
@@ -252,6 +252,7 @@ flowchart LR
 | [`docs_check.py`](../scripts/docs_check.py) | Verify that every document required by the spec exists and is not a stub. | 170 | `check_file`, `_strip_code`, `_has_heading`, `check_adrs`, `check_decisions_log_per_phase`, `main` |
 | [`ingest.py`](../scripts/ingest.py) | Run a knowledge sync from the command line. | 100 | `run`, `main` |
 | [`new_connector.py`](../scripts/new_connector.py) | Generate a new connector: module, entry point, contract test and documentation row. | 312 | `generate`, `_register_entry_point`, `_append_doc_row`, `main` |
+| [`new_instance.py`](../scripts/new_instance.py) | Create a second cell that runs alongside the first. ``make new-instance``. | 284 | `parse_args`, `next_port`, `render_profile`, `_replace_persona`, `main` |
 | [`repo_graph.py`](../scripts/repo_graph.py) | Build a knowledge graph of this repository from its AST. | 365 | `Symbol`, `Module`, `_decorator_name`, `_first_line`, `parse_module`, `discover` (+9) |
 | [`run_evals.py`](../scripts/run_evals.py) | Run the evaluation harness. ``make evals`` and ``make evals-ci``. | 198 | `parse_args`, `build_cell`, `_read_corpus`, `ingest_corpus`, `main_async`, `_refiner` (+1) |
 | [`seed.py`](../scripts/seed.py) | Seed a demo corpus so a fresh cell has something to answer from. | 118 | `SeedDocument`, `seed`, `main` |
@@ -367,8 +368,8 @@ flowchart LR
 | [`checkpointer.py`](../src/agent_forge/core/checkpointer.py) | Checkpointer selection. | 89 | `CheckpointerError`, `namespaced_thread_id`, `open_checkpointer` |
 | [`classification.py`](../src/agent_forge/core/classification.py) | Data classification C0-C4. | 93 | `Classification`, `accumulate`, `is_within`, `coerce_payload` |
 | [`errors.py`](../src/agent_forge/core/errors.py) | Domain errors. | 138 | `AgentForgeError`, `ProfileError`, `CapabilityUnavailableError`, `AuthenticationError`, `AuthorizationError`, `PolicyDeniedError` (+7) |
-| [`graph.py`](../src/agent_forge/core/graph.py) | The agentic graph. | 800 | `GateOutcome`, `identity_gate`, `GraphDeps`, `_digest`, `_intake`, `_governance_gate` (+19) |
-| [`hitl.py`](../src/agent_forge/core/hitl.py) | Human in the loop. | 228 | `Approver`, `ApprovalPolicy`, `PendingApproval`, `ApprovalStore`, `InMemoryApprovalStore`, `build_request` (+4) |
+| [`graph.py`](../src/agent_forge/core/graph.py) | The agentic graph. | 801 | `GateOutcome`, `identity_gate`, `GraphDeps`, `_digest`, `_intake`, `_governance_gate` (+19) |
+| [`hitl.py`](../src/agent_forge/core/hitl.py) | Human in the loop. | 244 | `Approver`, `ApprovalPolicy`, `PendingApproval`, `ApprovalStore`, `InMemoryApprovalStore`, `build_request` (+4) |
 | [`planner.py`](../src/agent_forge/core/planner.py) | Planner: decomposes a request into steps. | 178 | `PlanRequest`, `Planner`, `parse_plan`, `_drop_unknown_tools`, `_single_step`, `_with_feedback` (+1) |
 | [`prompts.py`](../src/agent_forge/core/prompts.py) | Versioned prompt registry. | 158 | `PromptError`, `Prompt`, `PromptRegistry`, `_load_prompt` |
 | [`router.py`](../src/agent_forge/core/router.py) | Intent router. | 144 | `normalise`, `RouteDecision`, `IntentRouter` |
@@ -398,20 +399,20 @@ flowchart LR
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../src/agent_forge/evals/__init__.py) | Evaluation harness: datasets, scorers, thresholds and the CI gate. | 47 | — |
-| [`harness.py`](../src/agent_forge/evals/harness.py) | The eval harness: run the datasets through a cell and compare against the thresholds. | 471 | `Threshold`, `EvalReport`, `load_thresholds`, `load_dataset`, `load_datasets`, `Harness` (+6) |
+| [`harness.py`](../src/agent_forge/evals/harness.py) | The eval harness: run the datasets through a cell and compare against the thresholds. | 462 | `Threshold`, `EvalReport`, `load_thresholds`, `load_dataset`, `load_datasets`, `Harness` (+6) |
 | [`ragas_adapter.py`](../src/agent_forge/evals/ragas_adapter.py) | Ragas metrics driven by the cell's own local model. | 150 | `RagasRefiner`, `build_refiner` |
-| [`scorers.py`](../src/agent_forge/evals/scorers.py) | Scorers for the eval harness: built-in first, Ragas and DeepEval when installed. | 223 | `CaseResult`, `MetricSummary`, `_tokens`, `groundedness`, `answer_relevancy`, `context_precision` (+7) |
+| [`scorers.py`](../src/agent_forge/evals/scorers.py) | Scorers for the eval harness: built-in first, Ragas and DeepEval when installed. | 221 | `CaseResult`, `MetricSummary`, `_tokens`, `groundedness`, `answer_relevancy`, `context_precision` (+7) |
 
 ### `src/agent_forge/events`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
 | [`__init__.py`](../src/agent_forge/events/__init__.py) | Event fabric: CloudEvents over a swappable bus, plus the evidence chain. | 85 | `build_bus`, `build_ledger` |
-| [`aggregator.py`](../src/agent_forge/events/aggregator.py) | Publishing task results and acting on judge verdicts. | 148 | `result_event`, `_status_of`, `Aggregator` |
+| [`aggregator.py`](../src/agent_forge/events/aggregator.py) | Publishing task results and acting on judge verdicts. | 162 | `result_event`, `_status_of`, `Aggregator` |
 | [`bus.py`](../src/agent_forge/events/bus.py) | The event bus behind a Protocol, so the broker can be swapped without touching logic. | 182 | `subject_for`, `SeenEvents`, `EventBus`, `_Subscription`, `InMemoryBus`, `_matches` |
-| [`evidence.py`](../src/agent_forge/events/evidence.py) | Append-only evidence ledger with a hash chain. | 382 | `ChainError`, `digest`, `LedgerRecord`, `LedgerSink`, `JsonlSink`, `_append_line` (+6) |
+| [`evidence.py`](../src/agent_forge/events/evidence.py) | Append-only evidence ledger with a hash chain. | 384 | `ChainError`, `digest`, `LedgerRecord`, `LedgerSink`, `JsonlSink`, `_append_line` (+6) |
 | [`judge.py`](../src/agent_forge/events/judge.py) | The local judge: LLM-as-judge with rubrics, plus deterministic checks it cannot skip. | 229 | `Rubric`, `coverage_of`, `LocalJudge`, `_looks_like_a_refusal`, `_parse_scores` |
-| [`nats_impl.py`](../src/agent_forge/events/nats_impl.py) | NATS JetStream implementation of the event bus. | 222 | `NatsBus`, `_durable_name`, `_delivery_count`, `_safe` |
+| [`nats_impl.py`](../src/agent_forge/events/nats_impl.py) | NATS JetStream implementation of the event bus. | 271 | `BrokerUnavailableError`, `NatsBus`, `_durable_name`, `_delivery_count`, `_safe` |
 
 ### `src/agent_forge/events/schemas`
 
@@ -433,14 +434,14 @@ flowchart LR
 |---|---|---:|---|
 | [`__init__.py`](../src/agent_forge/governance/__init__.py) | The governance layer the graph calls. | 242 | `GovernanceService`, `_ceiling_for`, `_dlp_reasons`, `build_governance` |
 | [`decisions.py`](../src/agent_forge/governance/decisions.py) | The request and verdict shapes every policy decision travels in. | 201 | `PolicyKind`, `_Model`, `PolicyRequest`, `PolicyVerdict`, `combine`, `_parse` |
-| [`dlp.py`](../src/agent_forge/governance/dlp.py) | DLP and prompt firewall, on the way in and on the way out. | 223 | `Severity`, `DlpRule`, `DlpMatch`, `DlpResult`, `load_rules`, `DlpEngine` |
+| [`dlp.py`](../src/agent_forge/governance/dlp.py) | DLP and prompt firewall, on the way in and on the way out. | 249 | `Severity`, `DlpRule`, `DlpMatch`, `DlpResult`, `load_rules`, `DlpEngine` |
 | [`pdp.py`](../src/agent_forge/governance/pdp.py) | Policy decision points: the local Rego base in Python, and the remote OPA overlay. | 318 | `PolicyDecisionPoint`, `LocalPdp`, `_Entry`, `OpaPdp`, `CachingPdp` |
 
 ### `src/agent_forge/knowledge`
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/knowledge/__init__.py) | Knowledge: ingestion, retrieval and the access control that governs both. | 239 | `KnowledgeService`, `build_knowledge`, `highest_classification` |
+| [`__init__.py`](../src/agent_forge/knowledge/__init__.py) | Knowledge: ingestion, retrieval and the access control that governs both. | 242 | `KnowledgeService`, `build_knowledge`, `highest_classification` |
 | [`access_control.py`](../src/agent_forge/knowledge/access_control.py) | Identity-aware retrieval: the one place that turns identity into a store filter. | 179 | `AccessFilter`, `PolicyView`, `build_filter`, `apply`, `to_qdrant_filter` |
 | [`classifier.py`](../src/agent_forge/knowledge/classifier.py) | C0-C4 classification at ingestion time. | 224 | `ClassificationResult`, `Classifier`, `_parse_level`, `parse_overrides` |
 | [`documents.py`](../src/agent_forge/knowledge/documents.py) | The units the knowledge pipeline moves: documents and chunks. | 306 | `_now`, `SourceRef`, `AccessControl`, `Document`, `Chunk`, `RetrievalResult` (+5) |
@@ -455,7 +456,7 @@ flowchart LR
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/knowledge/graphrag/__init__.py) | GraphRAG: entities, relations and neighbourhood retrieval. | 456 | `GraphStoreError`, `Entity`, `Relation`, `GraphStore`, `extract_entities`, `_Node` (+4) |
+| [`__init__.py`](../src/agent_forge/knowledge/graphrag/__init__.py) | GraphRAG: entities, relations and neighbourhood retrieval. | 479 | `GraphStoreError`, `Entity`, `Relation`, `GraphStore`, `extract_entities`, `_Node` (+4) |
 
 ### `src/agent_forge/knowledge/ingestion`
 
@@ -469,8 +470,8 @@ flowchart LR
 |---|---|---:|---|
 | [`__init__.py`](../src/agent_forge/knowledge/rag/__init__.py) | Retrieval: embeddings, vector storage and hybrid search. | 60 | — |
 | [`embeddings.py`](../src/agent_forge/knowledge/rag/embeddings.py) | Embeddings. | 179 | `Embeddings`, `GatewayEmbeddings`, `HashingEmbeddings`, `_fold`, `_bucket`, `_normalise` (+3) |
-| [`retriever.py`](../src/agent_forge/knowledge/rag/retriever.py) | Hybrid retrieval: BM25 + vectors + graph, fused with RRF, then reranked. | 482 | `tokenize`, `BM25Index`, `GraphRetriever`, `Reranker`, `LexicalReranker`, `_proximity` (+4) |
-| [`vector_store.py`](../src/agent_forge/knowledge/rag/vector_store.py) | Vector storage, with the access filter pushed into the query. | 325 | `VectorStoreError`, `VectorStore`, `InMemoryVectorStore`, `QdrantVectorStore`, `build_vector_store` |
+| [`retriever.py`](../src/agent_forge/knowledge/rag/retriever.py) | Hybrid retrieval: BM25 + vectors + graph, fused with RRF, then reranked. | 486 | `tokenize`, `BM25Index`, `GraphRetriever`, `Reranker`, `LexicalReranker`, `_proximity` (+4) |
+| [`vector_store.py`](../src/agent_forge/knowledge/rag/vector_store.py) | Vector storage, with the access filter pushed into the query. | 352 | `VectorStoreError`, `VectorStore`, `InMemoryVectorStore`, `QdrantVectorStore`, `build_vector_store` |
 
 ### `src/agent_forge/knowledge/sources`
 
@@ -486,7 +487,7 @@ flowchart LR
 | [`episodic.py`](../src/agent_forge/memory/episodic.py) | Episodic memory: what worked, so the area's agent gets better at the area's work. | 220 | `Episode`, `EpisodicMemory`, `_generalise`, `_tokens` |
 | [`long_term.py`](../src/agent_forge/memory/long_term.py) | Long-term memory: facts and preferences that outlive a session. | 365 | `MemoryFact`, `LongTermMemory`, `scope_key`, `KeyValueLongTermMemory`, `Mem0LongTermMemory`, `_visible_buckets` (+1) |
 | [`scrubbing.py`](../src/agent_forge/memory/scrubbing.py) | PII scrubbing, applied before anything persistent is written. | 230 | `Finding`, `ScrubResult`, `_luhn`, `_iban_valid`, `_nif_valid`, `Scrubber` (+2) |
-| [`semantic_cache.py`](../src/agent_forge/memory/semantic_cache.py) | Semantic cache: the operational half of CAG. | 310 | `Embedder`, `GatewayEmbedder`, `CachedAnswer`, `CacheHit`, `SemanticCache`, `_normalise` (+3) |
+| [`semantic_cache.py`](../src/agent_forge/memory/semantic_cache.py) | Semantic cache: the operational half of CAG. | 313 | `Embedder`, `GatewayEmbedder`, `CachedAnswer`, `CacheHit`, `SemanticCache`, `_normalise` (+3) |
 | [`short_term.py`](../src/agent_forge/memory/short_term.py) | Short-term memory: the session buffer. | 216 | `Session`, `ShortTermMemory`, `_mechanical_summary` |
 | [`store.py`](../src/agent_forge/memory/store.py) | Key-value storage behind a `Protocol`. | 191 | `MemoryStoreError`, `namespace`, `tenant_pattern`, `KeyValueStore`, `InMemoryStore`, `RedisStore` (+3) |
 
@@ -494,7 +495,7 @@ flowchart LR
 
 | Módulo | Descripción | LOC | Símbolos |
 |---|---|---:|---|
-| [`__init__.py`](../src/agent_forge/observability/__init__.py) | Observability: logs, traces, metrics and LLM traces. | 88 | `Observability`, `setup_observability` |
+| [`__init__.py`](../src/agent_forge/observability/__init__.py) | Observability: logs, traces, metrics and LLM traces. | 86 | `Observability`, `setup_observability` |
 | [`langfuse_client.py`](../src/agent_forge/observability/langfuse_client.py) | Langfuse: LLM traces, costs and judge scores in one place. | 184 | `_digest`, `LangfuseTracer`, `_classification_of`, `build_langfuse` |
 | [`logging.py`](../src/agent_forge/observability/logging.py) | Structured logging. | 154 | `redact_sensitive`, `_redact_mapping`, `add_service_context`, `configure_logging`, `get_logger`, `bind_request_context` (+2) |
 | [`metrics.py`](../src/agent_forge/observability/metrics.py) | Prometheus metrics, declared once so the label sets cannot drift. | 187 | `Metrics`, `get_metrics`, `reset_metrics`, `render` |
@@ -578,7 +579,7 @@ flowchart LR
 | [`test_connectors_in_graph.py`](../tests/unit/test_connectors_in_graph.py) | Connectors as the graph uses them, and the generator that creates new ones. | 325 | `ToolCallingSubgraph`, `run`, `test_an_n8n_callback_lets_the_graph_finish`, `test_a_workflow_that_never_answers_does_not_claim_success`, `test_the_graph_offers_only_allowlisted_healthy_tools`, `test_a_builtin_tool_is_offered_without_an_allowlist_entry` (+6) |
 | [`test_docs_check.py`](../tests/unit/test_docs_check.py) | Tests for the documentation completeness gate. | 119 | `test_this_repository_passes_the_gate`, `test_missing_file_is_reported`, `test_stub_is_reported`, `test_placeholder_markers_are_rejected`, `test_missing_heading_is_reported`, `test_fewer_than_four_accepted_adrs_fails` (+6) |
 | [`test_docs_check_markers.py`](../tests/unit/test_docs_check_markers.py) | Regression tests for the two false positives the docs gate hit on its first run. | 73 | `_doc`, `test_spanish_word_todo_is_not_a_placeholder`, `test_uppercase_todo_in_prose_is_still_a_placeholder`, `test_marker_inside_inline_code_is_a_reference_not_a_marker`, `test_marker_inside_fenced_block_is_ignored`, `test_stripping_code_preserves_line_numbers` (+2) |
-| [`test_evals.py`](../tests/unit/test_evals.py) | The eval harness and its CI gate. | 468 | `test_the_shipped_datasets_meet_the_documented_minimums`, `test_every_grounded_case_names_a_chunk_that_exists`, `test_every_case_declares_a_requester`, `test_a_malformed_dataset_line_is_fatal`, `test_the_shipped_thresholds_parse_and_cover_the_documented_metrics`, `test_the_zero_tolerance_thresholds_really_are_zero` (+26) |
+| [`test_evals.py`](../tests/unit/test_evals.py) | The eval harness and its CI gate. | 472 | `test_the_shipped_datasets_meet_the_documented_minimums`, `test_every_grounded_case_names_a_chunk_that_exists`, `test_every_case_declares_a_requester`, `test_a_malformed_dataset_line_is_fatal`, `test_the_shipped_thresholds_parse_and_cover_the_documented_metrics`, `test_the_zero_tolerance_thresholds_really_are_zero` (+26) |
 | [`test_events.py`](../tests/unit/test_events.py) | The event fabric, the local judge, and the evidence chain. | 597 | `_escaped`, `_ledger_text`, `_state`, `test_the_tenant_is_part_of_the_subject_not_only_the_payload`, `test_dots_in_the_event_type_are_flattened`, `test_a_tenantless_event_still_gets_a_valid_subject` (+46) |
 | [`test_governance.py`](../tests/unit/test_governance.py) | Governance: the PDP client, the DLP engine, and the gate the graph calls. | 450 | `_request`, `test_an_overlay_can_forbid_what_the_base_allows`, `test_an_overlay_cannot_permit_what_the_base_forbids`, `test_combining_narrows_the_ceiling_and_raises_the_autonomy_requirement`, `test_combining_nothing_denies`, `_opa_response` (+35) |
 | [`test_governance_e2e.py`](../tests/unit/test_governance_e2e.py) | The phase's exit criteria, demonstrated through a real graph rather than a unit. | 374 | `_run`, `_governance`, `test_c4_content_never_reaches_an_external_backend`, `test_a_task_that_accumulates_c4_is_not_synthesised_externally`, `_SecretFindingSubgraph`, `test_the_governance_layer_refuses_a_c4_external_route` (+11) |
@@ -591,6 +592,7 @@ flowchart LR
 | [`test_memory_in_graph.py`](../tests/unit/test_memory_in_graph.py) | Memory as the graph actually uses it. | 264 | `run`, `_memory`, `test_the_agent_remembers_a_fact_between_sessions`, `test_conversation_history_is_carried_into_the_next_turn`, `test_a_repeated_question_is_answered_from_cache_without_a_model_call`, `test_a_cache_hit_is_not_served_to_a_narrower_requester` (+9) |
 | [`test_model_policy.py`](../tests/unit/test_model_policy.py) | The data-sovereignty invariant: C3/C4 content never reaches an external backend. | 216 | `policy`, `test_classified_content_never_routes_externally`, `test_classified_content_with_only_external_backends_raises`, `test_assert_allowed_catches_classification_raised_after_routing`, `test_external_backend_cannot_declare_a_ceiling_above_c2`, `test_config_without_sovereignty_metadata_is_treated_as_external` (+14) |
 | [`test_observability.py`](../tests/unit/test_observability.py) | Observability: spans, metrics and the Langfuse redaction rule. | 333 | `spans`, `metrics`, `test_a_full_request_produces_a_span_per_graph_node`, `test_every_node_span_carries_the_correlation_attributes`, `test_no_span_ever_carries_content`, `test_a_content_attribute_is_dropped_and_reported` (+16) |
+| [`test_packaging.py`](../tests/unit/test_packaging.py) | Packaging and hardening: the instance generator, the images and the Helm chart. | 399 | `generated`, `test_a_new_instance_produces_everything_it_needs_to_run`, `test_the_generated_instance_has_its_own_project_port_and_ledger`, `test_the_generated_profile_names_this_instance`, `test_the_generated_profile_keeps_the_reference_comments`, `test_the_generated_compose_includes_rather_than_copies` (+27) |
 | [`test_repo_graph.py`](../tests/unit/test_repo_graph.py) | Tests for the repository graph builder (RF-12). | 120 | `test_discover_skips_noise`, `test_parse_module_extracts_symbols_and_docs`, `test_parse_module_marks_async_functions`, `test_parse_module_returns_none_on_syntax_error`, `test_module_id_strips_src_and_init`, `test_build_graph_links_internal_imports` (+5) |
 | [`test_upstream.py`](../tests/unit/test_upstream.py) | The upstream surfaces: task lifecycle, MCP server, A2A and the Copilot Studio spec. | 424 | `_identity`, `_finished`, `test_ask_runs_to_completion_and_records_the_answer`, `test_a_paused_graph_surfaces_upstream_as_input_required`, `test_a_failing_graph_becomes_a_failed_task_not_an_exception`, `test_submit_returns_before_the_answer_and_status_finds_it_later` (+26) |
 

@@ -582,3 +582,85 @@ los spans, Ragas que habria evaluado contra OpenAI, y la extra `evals` que no im
 630 tests unit + policy; cobertura global 82.7 %.
 
 **Siguiente:** F8 · endurecimiento y empaque.
+
+## 2026-09-01 · F8 · Endurecimiento, empaque y cierre del DoD
+
+### D-062 · El override de instancia incluye el compose base, no lo copia
+**Razon:** una copia generada se separa del original la primera vez que alguien edita uno
+de los dos. Con `include`, un cambio en el compose del repositorio —una imagen fijada, un
+healthcheck, un limite de recursos— alcanza a todas las instancias sin regenerarlas.
+
+### D-063 · Cada capacidad concedida a un contenedor se verifico arrancandolo
+**Contexto:** anadir `cap_drop: ALL` al ancla comun tumbo Postgres, Redis y Neo4j: sus
+entrypoints hacen `chown` como root antes de bajar a su usuario.
+**Decision:** conceder solo lo que el log del contenedor pidio, con un comentario que dice
+por que, y un test que fija la lista exacta para que un servicio nuevo no herede
+capacidades por descuido. Razonar sobre lo que una imagen "probablemente necesita" produce
+o un endurecimiento decorativo o un stack que no arranca.
+
+### D-064 · Una imagen distroless no lleva healthcheck de contenedor
+**Contexto:** `otel-collector` y `loki` no tienen shell; sus sondas `CMD-SHELL` fallaban con
+`exec: "/bin/sh": no such file` en cada intento y las dejaban `unhealthy` para siempre.
+**Decision:** retirarlas, con el motivo escrito, y observar su salud desde Prometheus. Un
+`depends_on: service_healthy` sobre una de ellas habria bloqueado el arranque entero; hay
+un test que comprueba que nadie espera a un servicio que no puede reportar salud.
+
+### D-065 · Conectar con el broker debe fallar, no colgarse
+**Contexto:** `nats.connect` reintenta indefinidamente por defecto. Con `NATS_URL` puesto y
+sin broker, el primer publish —dentro de una peticion— dejaba a la celula sin responder.
+**Decision:** connect acotado, fallo recordado para no volver a pagar el timeout, y
+`BrokerUnavailableError` propio para que el ledger y el agregador distingan "el fabric esta
+caido" de "el mensaje fue rechazado". El primero es una degradacion; el segundo, un defecto.
+
+### D-066 · La comprobacion de capacidades y los constructores dicen lo mismo
+**Contexto:** `check_capabilities` avisaba en desarrollo y `build_vector_store` /
+`build_graph_store` lanzaban igualmente. Como la imagen de API no lleva el extra
+`knowledge` por diseno (ADR-005), el perfil `core` no podia arrancar.
+**Decision:** los constructores aceptan `strict` y degradan en desarrollo. La promesa y el
+comportamiento vuelven a coincidir.
+
+### D-067 · Ningun placeholder de servicio opcional queda sin valor por defecto
+**Razon:** `MCP_GATEWAY_URL` y `N8N_URL` sin `:-` impedian arrancar una celula que no usa
+ninguno de los dos. Un servicio opcional que es obligatorio para arrancar no es opcional.
+
+### D-068 · `local/tiny` existe para que el arranque sea comprobable
+**Razon:** en CPU, `qwen3:8b` tarda minutos en la primera peticion y agota el timeout del
+gateway, asi que un arranque limpio parece roto. `qwen3:0.6b` (522 MB) no da respuestas
+utiles y no lo pretende: hace que `make up PROFILE=serving` se pueda comprobar en cualquier
+maquina.
+
+### D-069 · El chart espera un Secret; no lo renderiza
+**Razon:** un Secret renderizado desde `values.yaml` acaba en el historial de Helm y en
+cualquier `helm get values`, que es justo donde no debe estar una credencial. El chart
+tampoco empaqueta los almacenes: un `helm upgrade` de la celula no deberia poder tocar
+Postgres.
+
+### D-070 · `make sbom` y `make scan` se ejecutaron, no solo se escribieron
+**Contexto:** tal como estaban, `sbom` recorria los 1.6 GB de `.venv` durante mas de diez
+minutos y `scan` moria en el timeout de cinco minutos por defecto de trivy al recorrer
+`.git` con deteccion de secretos.
+**Decision:** exclusiones y `--timeout 30m`, medidos. Un target que nadie ha ejecutado no
+es un control; es una linea en un Makefile.
+
+### Cierre de F8
+
+**Construido:** generador de instancias, chart de Helm completo, endurecimiento de los
+catorce contenedores con capacidades minimas verificadas, targets de SBOM y escaneo que
+terminan, RUNBOOK con los procedimientos que la verificacion descubrio, y
+`WELL_ARCHITECTED.md` con evidencia por casilla.
+
+**Verificado en vivo:** el stack `core` completo arrancando sano, una respuesta real de un
+modelo local en streaming y sin streaming, dos instancias simultaneas en puertos y proyectos
+distintos, metricas con datos reales, ledger escribiendo, SBOM con 381 componentes y trivy
+con cero CRITICAL.
+
+**Cinco bugs de despliegue**, todos invisibles desde los tests y todos encontrados por
+arrancar el sistema: capacidades que tumbaban tres almacenes, la ruta del volumen de
+Postgres 18, dos healthchecks que no podian ejecutarse, NATS ausente colgando la peticion, y
+la comprobacion de capacidades contradiciendo a los constructores.
+
+664 tests unit + policy, 28 de integracion, cobertura global 82.4 %.
+
+**Los 15 puntos del Definition of Done tienen evidencia localizada**; los dos que dependen
+de credenciales de tenant o de un despliegue con datos se declaran como tales en la nota de
+sesion en vez de marcarse verdes.

@@ -1,6 +1,7 @@
 # Runbook operativo
 
-> Estado: procedimientos base en F0; se completan al cerrar F8 con mediciones reales.
+> Estado: completado en F8. Los procedimientos que se pudieron ejecutar aquí se
+> ejecutaron, y donde el número depende del despliegue se dice en vez de inventarlo.
 
 Documento para quien está de guardia. Cada procedimiento asume acceso al host y a
 `make`.
@@ -13,6 +14,12 @@ make ps                        # todos healthy
 curl -fsS localhost:8080/health/ready | jq
 make verify-ledger
 ```
+
+Dos contenedores **no** tienen healthcheck y eso es correcto: `otel-collector` y `loki`
+son imágenes distroless, sin shell, así que una sonda dentro del contenedor no puede
+ejecutarse y los dejaría en `unhealthy` para siempre. Su salud se ve en Prometheus, que
+raspa `/ready` y el endpoint del health_check extension. Nada depende de ellos con
+`service_healthy`.
 
 `/health/ready` reporta **por dependencia** (postgres, redis, litellm, opa, qdrant,
 neo4j, nats) y además las **capacidades instaladas** (qué extras están presentes). Un
@@ -28,6 +35,7 @@ neo4j, nats) y además las **capacidades instaladas** (qué extras están presen
 | Tarea colgada | `GET /admin/approvals` | Espera aprobación humana |
 | Coste disparado | Dashboard "Coste por tenant" | Caché semántica desactivada o budget mal puesto |
 | `verify-ledger` falla | Ver sección 6 | Incidente de integridad: escalar |
+| Un contenedor en `Restarting` | `docker compose logs <servicio>` | Casi siempre permisos: ver 3.6 |
 
 ## 3. Incidentes
 
@@ -36,6 +44,9 @@ neo4j, nats) y además las **capacidades instaladas** (qué extras están presen
 Impacto: se deniega C2+ y A2+. C0/C1 sigue funcionando.
 
 1. Confirmar: `agentforge_policy_decisions_total{effect="fail_closed"}` creciendo.
+   Es una etiqueta propia, distinta de `deny`: "la política dijo que no" y "el PDP no
+   respondía y por eso rechazamos" son incidentes distintos y no deben confundirse en un
+   gráfico.
 2. Verificar red y credenciales hacia `GOVERNANCE_PDP_URL`.
 3. Mientras dure, **no** cambiar a `permissive_c0c1` sin autorización del responsable de
    seguridad: es una decisión de riesgo, y queda registrada en el ledger en cada uso.
@@ -65,6 +76,29 @@ Señal: `agentforge_judge_verdicts_total{verdict="retry"}` alto para un mismo `t
 2. Verificar que el grupo `governance.hitl_approvers_group` tiene miembros activos.
 3. Las tareas no expiran solas por diseño: una acción A2 pendiente es una acción que
    **no** se ha ejecutado. Cancelar explícitamente si procede.
+
+### 3.6 Un contenedor de infraestructura en bucle de reinicio
+
+Casi siempre son permisos, y hay dos causas conocidas porque las dos se produjeron al
+endurecer el stack.
+
+**`Operation not permitted` / `Permission denied` al arrancar.** El stack corre con
+`cap_drop: ALL`. Postgres, Redis y Neo4j hacen `chown` de su directorio de datos como root
+antes de bajar a su propio usuario, así que llevan un `cap_add` mínimo y explícito. Si se
+añade un servicio nuevo que falle así:
+
+```bash
+docker compose logs <servicio> | head -20    # la línea dirá qué operación se le negó
+```
+
+Añadir **sólo** la capacidad que pide, con un comentario que diga por qué. `cap_add: ALL`
+para salir del paso convierte el endurecimiento en decoración.
+
+**Postgres se queja de `pg_ctlcluster` y datos sin migrar.** La imagen 18+ guarda los datos
+en directorios por versión mayor bajo `/var/lib/postgresql` y **se niega a arrancar** si
+encuentra un montaje en el antiguo `/var/lib/postgresql/data`: lo lee como un clúster sin
+actualizar. El compose ya monta en la ruta correcta; si aparece tras una migración, es un
+volumen viejo y hay que hacer `pg_upgrade`, no mover el montaje.
 
 ## 4. Backups
 
@@ -114,7 +148,21 @@ defecto en Windows.
   advierte en el log: sirve para desarrollo, y una aprobación pendiente **no** sobrevive
   a un reinicio.
 
-## 8. Revisiones periódicas
+## 8. Segunda célula en el mismo host
+
+```bash
+make new-instance NAME=ventas TENANT=acme-mx
+cd instances/acme-mx-ventas
+docker compose --env-file ../../.env --env-file .env --profile core up -d
+curl -s http://127.0.0.1:8180/health/ready | jq
+```
+
+Los dos `--env-file` y en ese orden: el del repositorio trae la infraestructura compartida
+y sus secretos, el de la instancia sólo lo que la hace distinta. El generador no toca
+código —hay un test que lo comprueba comparando las marcas de tiempo de `src/`—, y cada
+instancia tiene su propio proyecto de Compose, su puerto y su cadena de evidencia.
+
+## 9. Revisiones periódicas
 
 | Qué | Cada |
 |---|---|

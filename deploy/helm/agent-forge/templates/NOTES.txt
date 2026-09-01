@@ -1,0 +1,26 @@
+La celula "{{ .Values.env.AGENT_FORGE_INSTANCE }}" esta desplegada como
+{{ include "agent-forge.fullname" . }}.
+
+Comprobar que puede servir:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "agent-forge.fullname" . }} 8080:{{ .Values.service.port }}
+  curl -s localhost:8080/health/ready | jq
+
+Tres cosas que este chart espera y no crea:
+
+  1. El Secret "{{ .Values.secrets.existingSecret }}" con: {{ join ", " .Values.secrets.keys }}.
+     No se renderiza desde values porque acabaria en el historial de Helm.
+  2. Postgres, Redis, Qdrant y NATS alcanzables desde el namespace. Son servicios con su
+     propio ciclo de respaldo; un `helm upgrade` de la celula no deberia poder tocarlos.
+  3. Un proxy con TLS por delante. La celula nunca se expone directamente.
+
+{{- if not .Values.image.digest }}
+
+AVISO: la imagen esta fijada por tag y no por digest. En produccion, dos replicas del
+mismo Deployment pueden acabar corriendo codigo distinto. Fija `image.digest`.
+{{- end }}
+{{- if .Values.ledger.enabled }}
+
+La cadena de evidencia vive en un PVC con `helm.sh/resource-policy: keep`: `helm uninstall`
+no la borra. Es la pista de auditoria de todo lo que la celula hizo.
+{{- end }}

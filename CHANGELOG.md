@@ -5,6 +5,36 @@ Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado
 
 ## [Unreleased]
 
+### Added
+- **F8 · Endurecimiento y empaque**: `make new-instance` (perfil, `.env`, override de
+  Compose que **incluye** el base en vez de copiarlo, y README por instancia); chart de
+  Helm completo (Deployment con HPA, ConfigMap del perfil, PVC del ledger con
+  `resource-policy: keep`, Job de ingesta, CronJob que verifica la cadena, ServiceMonitor,
+  Ingress) que espera un Secret y no empaqueta los almacenes; `cap_drop: ALL` en los
+  catorce servicios con `cap_add` minimo **verificado arrancando cada imagen**; targets
+  `sbom`, `sbom-image`, `scan` y `scan-image` que terminan; alias `local/tiny` para que el
+  arranque sea comprobable en CPU; `RUNBOOK.md` y `WELL_ARCHITECTED.md` completados con
+  evidencia por casilla.
+
+### Fixed
+- **El perfil `core` no arrancaba**: `check_capabilities` avisaba en desarrollo mientras
+  `build_vector_store` y `build_graph_store` lanzaban igualmente, y la imagen de API no
+  lleva el extra `knowledge` por diseno (ADR-005). Ahora degradan en desarrollo y siguen
+  siendo fatales en produccion.
+- **Postgres 18 se negaba a arrancar**: el volumen se montaba en `/var/lib/postgresql/data`
+  y la imagen lo lee como un cluster sin migrar. Movido a `/var/lib/postgresql`.
+- **Una peticion se colgaba sin broker**: `nats.connect` reintenta indefinidamente por
+  defecto y el primer publish ocurre dentro de la peticion. Connect acotado, fallo
+  recordado, y `BrokerUnavailableError` para distinguir degradacion de defecto.
+- **Dos healthchecks que no podian ejecutarse**: `otel-collector` y `loki` son distroless y
+  sus sondas `CMD-SHELL` fallaban en cada intento, dejandolas `unhealthy` para siempre.
+- **`MCP_GATEWAY_URL` y `N8N_URL` sin valor por defecto** impedian arrancar una celula que
+  no usa ninguno de los dos.
+- **El plugin de pytest de `deepeval`** leia `.env` al arrancar y mataba la sesion entera
+  antes de recolectar un solo test. Desactivado con `-p no:deepeval`.
+- **`make sbom` y `make scan` no terminaban**: el primero recorria 1.6 GB de `.venv`, el
+  segundo moria en el timeout por defecto de trivy al recorrer `.git`.
+
 ### Changed
 - `QualityHook` devuelve `QualityVerdict` en vez de un diccionario de puntuaciones, y el
   grafo enruta tambien `replan`. Los umbrales viven con el juez, donde el perfil los

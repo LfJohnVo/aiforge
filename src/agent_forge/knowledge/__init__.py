@@ -175,7 +175,9 @@ def build_knowledge(
     knowledge = profile.knowledge
 
     store = vector_store or build_vector_store(
-        source.get("QDRANT_URL", ""), api_key=source.get("QDRANT_API_KEY", "")
+        source.get("QDRANT_URL", ""),
+        api_key=source.get("QDRANT_API_KEY", ""),
+        strict=source.get("AGENT_FORGE_ENV", "development") == "production",
     )
     embedder = embeddings or build_embeddings(gateway)
     graph = (
@@ -185,6 +187,7 @@ def build_knowledge(
             source.get("NEO4J_URI", ""),
             source.get("NEO4J_USER", "neo4j"),
             source.get("NEO4J_PASSWORD", ""),
+            strict=source.get("AGENT_FORGE_ENV", "development") == "production",
             enabled=knowledge.graphrag.enabled,
         )
     )

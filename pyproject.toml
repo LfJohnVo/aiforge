@@ -205,7 +205,12 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-addopts = "-q --strict-markers --import-mode=importlib"
+# `-p no:deepeval`: installing the `evals` extra registers a pytest plugin that reads
+# `.env` at startup and refuses an empty `AZURE_OPENAI_ENDPOINT`. With both present the
+# session dies before collecting a single test. We never drive deepeval from pytest --
+# the harness calls it directly -- so the plugin has nothing to contribute and every
+# reason to stay out.
+addopts = "-q --strict-markers --import-mode=importlib -p no:deepeval"
 pythonpath = ["."]
 markers = [
   "integration: requires live infrastructure (docker compose profile)",

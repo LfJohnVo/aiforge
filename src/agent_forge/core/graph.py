@@ -192,10 +192,12 @@ async def _governance_gate(state: AgentState, deps: GraphDeps) -> dict[str, Any]
         fail_closed=outcome.fail_closed,
     )
 
+    # `fail_closed` is its own effect, not just another deny: "policy said no" and "the
+    # PDP was unreachable so we refused" are different incidents with different runbook
+    # entries, and an operator has to be able to tell them apart from the metric alone.
+    effect = "allow" if outcome.allow else ("fail_closed" if outcome.fail_closed else "deny")
     _metrics().policy_decisions.labels(
-        tenant=state.identity.tenant_id,
-        decision="gate",
-        effect="allow" if outcome.allow else "deny",
+        tenant=state.identity.tenant_id, decision="gate", effect=effect
     ).inc()
 
     if not outcome.allow:

@@ -1,0 +1,142 @@
+# Valores por defecto de una celula.
+#
+# Lo que este chart NO hace, y por que: no empaqueta Postgres, Redis, Qdrant, Neo4j ni
+# NATS. En Compose se levantan porque un portatil los necesita; en Kubernetes son
+# servicios gestionados o charts con su propio ciclo de respaldo, y un `helm upgrade` de
+# la celula no deberia poder tocarlos.
+#
+# Tampoco optimiza para Kubernetes a costa del objetivo Compose: consume las **mismas**
+# imagenes y el **mismo** perfil.
+
+image:
+  repository: ghcr.io/silent4business/agent-forge
+  # Por digest en produccion. Un tag movil hace que dos replicas del mismo Deployment
+  # puedan correr codigo distinto, y eso es indepurable.
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+replicaCount: 2
+
+# El perfil de la celula. Va a un ConfigMap y se monta en /app/configs/agent.profile.yaml.
+# Es el mismo fichero que en Compose: si divergen, uno de los dos esta sin probar.
+profile:
+  # Contenido en linea, o `existingConfigMap` para gestionarlo fuera del release.
+  existingConfigMap: ""
+  content: {}
+
+# Secretos. El chart NO los crea: los espera. Un Secret renderizado desde values acaba en
+# el historial de Helm y en cualquier `helm get values`, que es exactamente donde no debe
+# estar una credencial.
+secrets:
+  existingSecret: agent-forge-secrets
+  # Claves que el Secret debe traer. El Deployment falla al arrancar si falta alguna, que
+  # es preferible a arrancar sin gateway de modelos y descubrirlo en la primera peticion.
+  keys:
+    - POSTGRES_DSN
+    - REDIS_URL
+    - LITELLM_MASTER_KEY
+    - AGENT_API_KEYS
+
+env:
+  AGENT_FORGE_ENV: production
+  AGENT_FORGE_INSTANCE: default
+  LOG_LEVEL: INFO
+  LOG_FORMAT: json
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts: []
+  tls: []
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    # Sin limite de CPU a proposito: el throttling de CFS castiga picos cortos, y una
+    # celula pasa el tiempo esperando al modelo. La memoria si tiene limite, porque un
+    # OOM del nodo afecta a los vecinos.
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# El contenedor ya corre como UID 10001 sin root; esto lo hace explicito para los
+# admission controllers que lo exigen.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: RuntimeDefault
+
+podSecurityContext:
+  fsGroup: 10001
+
+# La cadena de evidencia. ReadWriteOnce y una replica por volumen: dos procesos
+# escribiendo la misma cadena la bifurcan, y una cadena bifurcada falla la verificacion
+# igual que una manipulada.
+ledger:
+  enabled: true
+  storageClass: ""
+  size: 10Gi
+  mountPath: /var/lib/agent-forge/ledger
+
+# Job de ingesta. Manual por defecto: una reingesta completa es cara y quien la lanza
+# debe saber que la lanzo.
+ingestion:
+  enabled: false
+  schedule: "0 */6 * * *"
+  resources:
+    requests:
+      cpu: 1
+      memory: 2Gi
+    limits:
+      memory: 4Gi
+
+# CronJob de mantenimiento: verifica la cadena de evidencia y aplica la retencion de
+# memoria. Que la verificacion sea un cron y no un test es deliberado: una cadena se
+# rompe en produccion, no en CI.
+maintenance:
+  enabled: true
+  schedule: "0 3 * * *"
+
+observability:
+  otelEndpoint: ""
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+
+# Sondas. `live` no depende de nada externo -- un parpadeo de la base de datos no debe
+# reiniciar un contenedor sano. `ready` si, porque una celula sin gateway de modelos no
+# puede servir.
+probes:
+  liveness:
+    path: /health/live
+    initialDelaySeconds: 10
+    periodSeconds: 20
+  readiness:
+    path: /health/ready
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    failureThreshold: 3
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

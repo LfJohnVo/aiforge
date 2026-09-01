@@ -11,7 +11,7 @@ COMPOSE := docker compose -f $(COMPOSE_FILE) --profile $(PROFILE)
 
 .PHONY: help install check lint fmt type test test-unit test-integration test-policies cov \
         up down logs ps restart evals evals-ci ingest repo-graph verify-ledger \
-        new-instance new-connector sbom scan clean docs-check
+        new-instance new-connector sbom sbom-image scan scan-image clean docs-check
 
 help: ## Show this help
 	@awk 'BEGIN{FS=":.*##"; printf "\nAgent Forge targets\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -103,11 +103,31 @@ evals: ## Run the evaluation harness locally
 evals-ci: ## Run evals with CI thresholds enforced
 	$(RUN) python scripts/run_evals.py --enforce-thresholds
 
-sbom: ## Generate a CycloneDX SBOM with syft
-	syft dir:. -o cyclonedx-json=sbom.json
+# The exclusions are not cosmetic: `.venv` is 1.6 GB of packages `uv.lock` already
+# pins, and without them syft walks it for over ten minutes to rediscover the same
+# dependency set. Measured, not assumed.
+sbom: ## Generate a CycloneDX SBOM of the source and the lockfile
+	syft dir:. -o cyclonedx-json=sbom.json \
+		--exclude './.venv' --exclude './node_modules' --exclude './.git' \
+		--exclude './**/__pycache__' --exclude './var' --exclude './instances'
 
-scan: ## Fail on CRITICAL vulnerabilities
-	trivy fs --severity CRITICAL --exit-code 1 --scanners vuln,secret .
+sbom-image: ## SBOM of the shipped image, which is what a customer actually runs
+	docker build -f deploy/compose/Dockerfile --target api -t agent-forge/api:sbom .
+	syft agent-forge/api:sbom -o cyclonedx-json=sbom.image.json
+
+# `--timeout 30m` and the skips are both load-bearing, and both were found by running
+# it: with secret scanning on and `.git` included, trivy walks past its 5-minute
+# default and dies with a context deadline, so the target failed for everyone.
+scan: ## Fail on CRITICAL vulnerabilities or committed secrets
+	trivy fs --severity CRITICAL --exit-code 1 --scanners vuln,secret \
+		--skip-dirs .venv --skip-dirs node_modules --skip-dirs var --skip-dirs .git \
+		--skip-dirs .ruff_cache --skip-dirs .mypy_cache --skip-dirs .pytest_cache \
+		--timeout 30m .
+
+scan-image: ## Scan the shipped image; CRITICAL blocks
+	docker build -f deploy/compose/Dockerfile --target api -t agent-forge/api:scan .
+	trivy image --severity CRITICAL --exit-code 1 --ignore-unfixed \
+		--timeout 30m agent-forge/api:scan
 
 clean: ## Remove caches and build artefacts
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov coverage.xml .coverage dist build

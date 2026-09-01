@@ -27,6 +27,7 @@ from agent_forge.gateway.litellm_client import GovernedGateway
 from agent_forge.memory.scrubbing import Scrubber
 from agent_forge.memory.store import KeyValueStore, dumps, loads, namespace
 from agent_forge.observability.logging import get_logger
+from agent_forge.observability.metrics import get_metrics
 
 log = get_logger(__name__)
 
@@ -192,8 +193,10 @@ class SemanticCache:
 
         if best is None:
             self.misses += 1
+            get_metrics().cache_misses.labels(tenant=tenant_id).inc()
             return None
         self.hits += 1
+        get_metrics().cache_hits.labels(tenant=tenant_id).inc()
         log.info(
             "cache.hit",
             tenant_id=tenant_id,

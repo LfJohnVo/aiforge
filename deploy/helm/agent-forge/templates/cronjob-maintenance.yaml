@@ -1,0 +1,49 @@
+{{- if .Values.maintenance.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "agent-forge.fullname" . }}-maintenance
+  labels: {{- include "agent-forge.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.maintenance.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 7
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels: {{- include "agent-forge.selectorLabels" . | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          securityContext: {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: maintenance
+              image: {{ include "agent-forge.image" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              securityContext: {{- toYaml .Values.securityContext | nindent 16 }}
+              # Verificar la cadena es un cron y no un test porque una cadena se rompe en
+              # produccion, no en CI. `backoffLimit: 0`: si falla, el Job queda fallido y
+              # visible; reintentarlo solo esconderia el hallazgo.
+              command: ["python", "scripts/verify_ledger.py"]
+              args: ["--path", {{ .Values.ledger.mountPath | quote }}]
+              env: {{- include "agent-forge.env" . | nindent 16 }}
+              volumeMounts:
+                {{- if .Values.ledger.enabled }}
+                - name: ledger
+                  mountPath: {{ .Values.ledger.mountPath }}
+                  readOnly: true
+                {{- end }}
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi
+            {{- if .Values.ledger.enabled }}
+            - name: ledger
+              persistentVolumeClaim:
+                claimName: {{ include "agent-forge.fullname" . }}-ledger
+            {{- end }}
+{{- end }}
