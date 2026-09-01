@@ -32,6 +32,7 @@ from agent_forge.core.router import IntentRouter
 from agent_forge.core.subgraphs.base import load_subgraph
 from agent_forge.gateway.litellm_client import GovernedGateway, LiteLLMTransport
 from agent_forge.gateway.model_policy import ModelPolicy
+from agent_forge.knowledge import KnowledgeService, build_knowledge
 from agent_forge.memory import MemoryManager, Scrubber, build_memory
 from agent_forge.observability.logging import configure_logging, get_logger
 from agent_forge.profile import AgentProfile, load_profile
@@ -114,6 +115,7 @@ class Runtime:
     graph: Any
     authenticator: Authenticator
     memory: MemoryManager
+    knowledge: KnowledgeService
     approvals: ApprovalStore
     approval_policy: ApprovalPolicy
     capabilities: dict[str, bool] = field(default_factory=dict)
@@ -129,6 +131,7 @@ class Runtime:
     async def aclose(self) -> None:
         await self.gateway.aclose()
         await self.memory.store.aclose()
+        await self.knowledge.aclose()
 
 
 def check_capabilities(profile: AgentProfile, *, strict: bool) -> dict[str, bool]:
@@ -217,6 +220,8 @@ async def build_runtime(
         fast_model=profile.models.fast,
     )
 
+    knowledge = build_knowledge(profile=profile, gateway=gateway, env=dict(source))
+
     deps = GraphDeps(
         subgraph=subgraph,
         prompts=prompts,
@@ -230,6 +235,7 @@ async def build_runtime(
         persona=profile.identity.persona,
         max_retries=profile.events.judge.max_retries,
         memory=memory,
+        knowledge=knowledge,
     )
 
     checkpointer = await stack.enter_async_context(
@@ -251,6 +257,7 @@ async def build_runtime(
         graph=graph,
         authenticator=Authenticator(AuthSettings.from_env(source)),
         memory=memory,
+        knowledge=knowledge,
         approvals=InMemoryApprovalStore(),
         approval_policy=ApprovalPolicy(
             approvers_group=profile.governance.hitl_approvers_group,
@@ -268,5 +275,6 @@ async def build_runtime(
         channels=profile.channels.enabled_names(),
         capabilities=sorted(k for k, v in capabilities.items() if v),
         memory_scope=profile.memory.ltm.scope,
+        knowledge=profile.knowledge.rag.enabled,
     )
     return runtime

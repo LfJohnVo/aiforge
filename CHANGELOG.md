@@ -6,6 +6,12 @@ Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado
 ## [Unreleased]
 
 ### Added
+- **F3 · Conocimiento**: ingesta incremental desde carpeta, SharePoint (delta queries) y
+  S3; pipeline parseo → chunking semántico → clasificación C0–C4 → embeddings → Qdrant;
+  GraphRAG sobre Neo4j; CAG con presupuesto; retrieval híbrido BM25 + vectorial + grafo
+  con fusión RRF, re-ranking y umbral de relevancia; y control de acceso identity-aware
+  aplicado **dentro** de la consulta. `POST /admin/ingest`, `GET /admin/knowledge`,
+  `scripts/ingest.py` y `scripts/seed.py`.
 - **F2 · Memoria**: `KeyValueStore` tras `Protocol` (Redis y en memoria), STM con TTL y
   resumen incremental, LTM con adapter propio por defecto y Mem0 para producción,
   memoria episódica de área, caché semántica que respeta clasificación **y grupos**,

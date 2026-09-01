@@ -35,6 +35,9 @@ PROMPTS_DIR = REPO_ROOT / "configs" / "prompts"
 LOCAL_FAST = ModelBackend("local/fast", Sovereignty.LOCAL, Classification.C4)
 LOCAL_QUALITY = ModelBackend("local/quality", Sovereignty.LOCAL, Classification.C4)
 EXTERNAL = ModelBackend("anthropic/claude", Sovereignty.EXTERNAL, Classification.C2)
+LOCAL_EMBEDDINGS = ModelBackend(
+    "local/embeddings", Sovereignty.LOCAL, Classification.C4, purpose="embedding"
+)
 
 
 @dataclass
@@ -66,6 +69,10 @@ class FakeTransport:
         for word in self._next_reply().split(" "):
             yield ChatChunk(delta=word + " ")
         yield ChatChunk(finish_reason="stop")
+
+    async def embed(self, texts: Sequence[str], model: str) -> list[list[float]]:
+        """Deterministic two-dimensional vectors; subclasses override for detail."""
+        return [[float(len(text)), 1.0] for text in texts]
 
     async def health(self) -> bool:
         return self.healthy
@@ -99,7 +106,7 @@ def fake_retriever(
 
 
 def make_policy() -> ModelPolicy:
-    return ModelPolicy([LOCAL_FAST, LOCAL_QUALITY, EXTERNAL])
+    return ModelPolicy([LOCAL_FAST, LOCAL_QUALITY, EXTERNAL, LOCAL_EMBEDDINGS])
 
 
 def make_gateway(

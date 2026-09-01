@@ -52,6 +52,7 @@ from agent_forge.core.subgraphs.base import (
     ToolRequest,
 )
 from agent_forge.gateway.litellm_client import GovernedGateway
+from agent_forge.knowledge import KnowledgeService
 from agent_forge.memory import MemoryManager
 from agent_forge.observability.logging import get_logger
 
@@ -132,6 +133,8 @@ class GraphDeps:
     retrieve: Any | None = None
     # Set by the runtime in F2. None means the cell runs stateless between turns.
     memory: MemoryManager | None = None
+    # Set by the runtime in F3. None means the cell answers without a corpus.
+    knowledge: KnowledgeService | None = None
     model_fast: str = "local/fast"
     model_quality: str = "local/quality"
     language: str = "es"
@@ -206,12 +209,23 @@ async def _governance_gate(state: AgentState, deps: GraphDeps) -> dict[str, Any]
     if outcome.redacted_text:
         update["messages"] = [Message(role="user", content=outcome.redacted_text)]
 
+    scoped_for_cag = state.model_copy(update={"identity": identity})
+    if deps.knowledge is not None:
+        corpus = await deps.knowledge.stable_corpus(identity)
+        if not corpus.empty:
+            update["scratchpad"] = {
+                **state.scratchpad,
+                "stable_corpus": corpus.as_context(),
+                "stable_citations": corpus.citations(),
+            }
+            update["classification"] = accumulate(state.classification, corpus.classification)
+
     if deps.memory is None:
         return update
 
     # The ceiling is only known now, and the cache must not be consulted before it is:
     # a lookup that ignores reach can hand back another user's answer.
-    scoped = state.model_copy(update={"identity": identity})
+    scoped = scoped_for_cag
     hit = await deps.memory.cached_answer(scoped)
     if hit is not None:
         log.info("graph.cache_hit", similarity=round(hit.similarity, 3))
@@ -233,6 +247,7 @@ async def _governance_gate(state: AgentState, deps: GraphDeps) -> dict[str, Any]
     context = await deps.memory.context_for(scoped)
     update["scratchpad"] = {
         **state.scratchpad,
+        **(update.get("scratchpad") or {}),
         "memory_history": [{"role": m.role, "content": m.content} for m in context["history"]],
         "memory_facts": [f.text for f in context["facts"]],
         "memory_hints": list(context["hints"]),
@@ -514,11 +529,20 @@ def _after_quality(state: AgentState) -> str:
 
 
 def _domain_context(state: AgentState, deps: GraphDeps) -> DomainContext:
+    """Build the facade the subgraph sees.
+
+    The retrieval closure is bound to *this* request's identity, so a domain plugin
+    cannot widen its own access: it asks a question and gets back what the requester is
+    entitled to, with no way to address the store directly.
+    """
+    retrieve = deps.retrieve
+    if retrieve is None and deps.knowledge is not None:
+        retrieve = deps.knowledge.retriever_for(state.identity)
     return DomainContext(
         state=state,
         prompts=deps.prompts,
         tools=deps.tool_catalog,
-        retrieve=deps.retrieve,
+        retrieve=retrieve,
         profile_extras={"language": deps.language, "persona": deps.persona},
     )
 
@@ -594,6 +618,11 @@ def _build_messages(state: AgentState, deps: GraphDeps) -> list[dict[str, str]]:
     if guidance:
         system = f"{system}\n\n## Contexto del dominio\n\n{guidance}"
 
+    stable = str(state.scratchpad.get("stable_corpus") or "")
+    if stable:
+        # Ahead of anything request-specific: the prefix has to be byte-identical across
+        # requests for vLLM's prefix cache to hit.
+        system = "\n\n".join([system, stable])
     system = _with_memory(system, state)
 
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]

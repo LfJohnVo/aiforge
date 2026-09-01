@@ -27,6 +27,17 @@ from agent_forge.core.graph import build_graph
 from agent_forge.core.hitl import ApprovalPolicy, InMemoryApprovalStore
 from agent_forge.core.subgraphs.base import ToolDescriptor
 from agent_forge.core.subgraphs.it_support import ItSupportSubgraph
+from agent_forge.knowledge import (
+    CagPreloader,
+    Classifier,
+    IngestionPipeline,
+    KnowledgeService,
+)
+from agent_forge.knowledge.rag import (
+    HashingEmbeddings,
+    HybridRetriever,
+    InMemoryVectorStore,
+)
 from agent_forge.memory import InMemoryStore, build_memory
 from agent_forge.runtime import Runtime, Settings
 from tests.support import FakeTransport, make_deps, make_gateway, make_policy, make_prompts
@@ -58,6 +69,26 @@ def _env(**extra: str) -> dict[str, str]:
     return base
 
 
+def _empty_knowledge() -> KnowledgeService:
+    """A real knowledge service over an empty corpus.
+
+    Empty rather than absent: the API tests should exercise the same code path a
+    deployed cell takes, and "no corpus yet" is the normal state on day one.
+    """
+    store = InMemoryVectorStore()
+    embeddings = HashingEmbeddings(dimension=64)
+    return KnowledgeService(
+        retriever=HybridRetriever(store, embeddings),
+        pipeline=IngestionPipeline(
+            vector_store=store,
+            embeddings=embeddings,
+            classifier=Classifier(default=Classification.C2, use_model=False),
+        ),
+        cag=CagPreloader(store=store),
+        vector_store=store,
+    )
+
+
 def _runtime(
     transport: FakeTransport,
     *,
@@ -73,6 +104,7 @@ def _runtime(
     profile = load_profile(env["AGENT_FORGE_PROFILE"], env=env)
     gateway = make_gateway(transport)
     memory = build_memory(store=InMemoryStore(), cache_similarity=0.9)
+    knowledge = _empty_knowledge()
     deps = make_deps(
         gateway=gateway,
         subgraph=subgraph,
@@ -81,6 +113,7 @@ def _runtime(
         tool_catalog=tool_catalog,
     )
     deps.memory = memory
+    deps.knowledge = knowledge
     return Runtime(
         settings=Settings.from_env(env),
         profile=profile,
@@ -91,6 +124,7 @@ def _runtime(
         graph=build_graph(deps, checkpointer=InMemorySaver()),
         authenticator=Authenticator(AuthSettings.from_env(env)),
         memory=memory,
+        knowledge=knowledge,
         approvals=InMemoryApprovalStore(),
         approval_policy=ApprovalPolicy(approvers_group="finanzas-lideres"),
         capabilities={"knowledge": False, "memory": False},

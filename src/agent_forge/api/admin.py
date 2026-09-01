@@ -7,6 +7,7 @@ called, in whatever process happens to be running at the time.
 
 from __future__ import annotations
 
+import os
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -19,6 +20,7 @@ from agent_forge.core.checkpointer import namespaced_thread_id
 from agent_forge.core.errors import ApprovalError, AuthorizationError, TaskNotFoundError
 from agent_forge.core.hitl import Approver, apply_approval, apply_rejection
 from agent_forge.core.state import AgentState, Identity
+from agent_forge.knowledge import build_reader
 from agent_forge.observability.logging import get_logger
 from agent_forge.runtime import Runtime
 
@@ -225,6 +227,52 @@ async def task_status(
         **state.summary(),
         "next": list(snapshot.next),
         "awaiting": [a.id for a in state.approvals if a.is_pending],
+    }
+
+
+@router.post("/ingest")
+async def trigger_ingest(
+    runtime: Annotated[Runtime, Depends(get_runtime)],
+    identity: Annotated[Identity, Depends(require_authenticated)],
+    source: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """Run a knowledge sync now, for one source or all of them.
+
+    Synchronous on purpose for the admin path: an operator triggering a sync wants the
+    report, not a job id. The scheduled runs go through the maintenance cron instead.
+    """
+    _same_tenant(identity, runtime)
+    profile = runtime.profile
+    configured = [s for s in profile.knowledge.sources if source is None or s.type == source]
+    if not configured:
+        raise TaskNotFoundError("no such source configured", source=source or "*")
+
+    reports = []
+    for entry in configured:
+        reader = build_reader(
+            entry,
+            tenant_id=profile.identity.tenant_id,
+            env=dict(os.environ),
+            default=profile.knowledge.default_classification,
+        )
+        reports.append((await runtime.knowledge.sync(reader)).to_dict())
+
+    log.info("admin.ingest_triggered", actor=identity.user_id, sources=len(reports))
+    return {"status": "ok", "reports": reports}
+
+
+@router.get("/knowledge")
+async def knowledge_stats(
+    runtime: Annotated[Runtime, Depends(get_runtime)],
+    identity: Annotated[Identity, Depends(require_authenticated)],
+) -> dict[str, Any]:
+    """Corpus size, configuration and the shape of the last retrieval."""
+    _same_tenant(identity, runtime)
+    return {
+        "instance": runtime.instance_key,
+        "healthy": await runtime.knowledge.health(),
+        **await runtime.knowledge.stats(identity.tenant_id),
+        "sources": [s.type for s in runtime.profile.knowledge.sources],
     }
 
 

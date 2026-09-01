@@ -1,7 +1,5 @@
 # Conocimiento: RAG + CAG + GraphRAG
 
-> Estado: contrato definido en F0; implementación en F3.
-
 ## 1. Pipeline de ingesta
 
 ```mermaid
@@ -99,8 +97,33 @@ del sistema y se apoya en el prefix caching de vLLM. Evita retrieval para pregun
 sobre documentos que casi nunca cambian (políticas, procedimientos). Complementado con
 la caché semántica de `memory/semantic_cache.py`.
 
-## 9. Sin extras instalados
+## 9. Umbral de relevancia
+
+La búsqueda por vecino más cercano **siempre** devuelve algo. Preguntar por una receta de
+paella a un agente de Finanzas devolvía la política de viáticos, y el modelo podía
+citarla. Una cita a un documento irrelevante es peor que ninguna cita.
+
+El re-ranker produce una cobertura normalizada (0–1) de los términos de la consulta, y el
+retriever descarta lo que quede por debajo de `MIN_RELEVANCE` (0.15). El umbral se aplica
+sólo sobre esa puntuación: los valores de RRF no son comparables entre corpus, y por eso
+el re-ranking está activo por defecto.
+
+## 10. Sin extras instalados
 
 Sin el extra `knowledge` (ADR-005) siguen funcionando: parser de texto plano y Markdown,
-almacén vectorial en memoria y BM25. Suficiente para desarrollo y para los tests
-unitarios; insuficiente para producción, y `/health` lo dice explícitamente.
+almacén vectorial en memoria, grafo en memoria, BM25 y embeddings por *feature hashing*
+sobre palabras y trigramas de caracteres. Nada de eso es un stub —el hashing es una
+técnica real, determinista y sin dependencias— pero sí es **léxico**: acierta
+reformulaciones casi idénticas y falla las paráfrasis. Suficiente para desarrollo y para
+los tests; insuficiente para producción, y `/health` lo dice explícitamente.
+
+## 11. Endpoints
+
+| Endpoint | Qué hace |
+|---|---|
+| `POST /admin/ingest[?source=folder]` | Sincroniza ahora y devuelve el informe por fuente |
+| `GET /admin/knowledge` | Tamaño del corpus, configuración y forma de la última recuperación |
+
+Desde la línea de comandos: `make ingest` (o `scripts/ingest.py --dry-run` para ver qué
+fuentes están configuradas sin tocarlas) y `make seed` para un corpus de demostración con
+ACLs mixtas, que hace visible el control de acceso desde el primer minuto.

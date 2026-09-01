@@ -9,7 +9,7 @@ Reglas permanentes:
 - Un commit por unidad lógica; actualiza docs/memory/DECISIONS_LOG.md al cerrar cada fase.
 - Ante ambigüedad: decide, registra un ADR y continúa. No esperes confirmación.
 - En la Fase 0 expande este archivo según ordena el prompt, pero NUNCA borres este bloque de misión.
-- Estado actual: Fase 3 — Conocimiento (F0, F1 y F2 cerradas)
+- Estado actual: Fase 4 — Conectores (F0–F3 cerradas)
 
 ---
 
@@ -139,8 +139,8 @@ Dos restricciones que vienen de resolver el lockfile, no de preferencia:
 | F0 | Fundación: scaffold, tooling, CI, docs, ADR-001..006 | **cerrada** |
 | F1 | Núcleo agéntico + canal OpenAI-compatible | **cerrada** |
 | F2 | Memoria STM/LTM/episódica, caché semántica, olvido | **cerrada** |
-| F3 | Conocimiento: ingesta, RAG/CAG/GraphRAG, ACL | **en curso** |
-| F4 | Conectores: registry, MCP client, n8n, OpenConnector, BDs | pendiente |
+| F3 | Conocimiento: ingesta, RAG/CAG/GraphRAG, ACL | **cerrada** |
+| F4 | Conectores: registry, MCP client, n8n, OpenConnector, BDs | **en curso** |
 | F5 | Upstream MCP/A2A/OpenAPI + canales restantes | pendiente |
 | F6 | Gobernanza, Agregador/Judge, evidencia | pendiente |
 | F7 | Observabilidad y evals con gates | pendiente |

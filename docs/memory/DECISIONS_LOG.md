@@ -190,3 +190,68 @@ una fuga real de PII a un almacén persistente.
 
 **Siguiente:** F3 · conocimiento.
 
+---
+
+## 2026-09-01 · F3 · Conocimiento
+
+### D-018 · El filtro de acceso se traduce en un solo sitio
+**Razón:** el requisito "el usuario sin permiso no recibe ni la existencia del documento"
+obliga a que el filtro entre en la consulta. Que sea auditable exige además que exista una
+única traducción de (identidad x grupos x techo x política) a filtro de almacén:
+`build_filter`. Un segundo punto de traducción es, por definición, el bug.
+**Consecuencia:** cada rama de recuperación —vectorial, BM25, grafo, CAG— filtra con el
+mismo predicado **antes** de fusionar. Fusionar y filtrar después reintroduce el canal
+lateral: la longitud de la lista fusionada dependería de lo que el solicitante no puede
+ver.
+
+### D-019 · Umbral de relevancia sobre la puntuación del re-ranker
+**Contexto:** la búsqueda por vecino más cercano siempre devuelve algo. Una pregunta ajena
+al corpus devolvía el documento menos lejano, con cita, y el modelo podía citarlo.
+**Decisión:** `MIN_RELEVANCE = 0.15` sobre la cobertura normalizada del re-ranker. No
+sobre RRF: sus valores no son comparables entre corpus, y por eso el re-ranking queda
+activo por defecto.
+
+### D-020 · `point_id` como UUID5, no como digest
+**Contexto:** Qdrant sólo acepta enteros sin signo o UUIDs como identificador de punto. El
+digest hexadecimal hacía fallar **todos** los upserts con 400, y el almacén en memoria de
+los tests unitarios lo aceptaba encantado.
+**Decisión:** UUID5 con espacio de nombres constante. Sigue siendo determinista —re-ingerir
+reemplaza en vez de duplicar— y ahora es válido.
+**Lección:** el adaptador real necesita su propio test de integración; el doble in-memory
+sólo prueba el contrato que uno mismo escribió.
+
+### D-021 · La ACL va dentro de `min_should`, no en un `should`
+**Contexto:** el filtro de Qdrant colocaba las condiciones de ACL en un `should` con
+`min_should: {"conditions": 1}`, que es una forma inválida.
+**Decisión:** `min_should: {"conditions": [...], "min_count": 1}`.
+**Por qué importa más de lo que parece:** la variante *silenciosa* de este error —dejar las
+condiciones en un `should` a secas— no falla, simplemente convierte la ACL en una pista de
+ranking. Habría devuelto documentos prohibidos, ordenados un poco más abajo.
+
+### D-022 · Embeddings por *feature hashing* como implementación por defecto
+**Alternativas:** exigir el extra `knowledge` para cualquier recuperación.
+**Razón:** el hashing con signo sobre palabras y trigramas es una técnica real,
+determinista y sin dependencias. Permite que los tests de aislamiento y de ACL corran en
+cualquier entorno. Su límite es honesto y está documentado: es **léxico**, no semántico.
+
+### D-023 · ACL de usuario y ACL de grupo conceden de forma independiente
+**Razón:** un documento dirigido nominalmente a una persona no lo ve su jefe por ser su
+jefe. Las visibilidades se solapan, no se anidan. Lo hizo explícito un test de integración
+cuya aserción original (`analista ⊂ líder`) era falsa por una razón correcta.
+
+### Cierre de F3
+
+**Construido:** modelo de documento con ACL y clasificación embebidas, clasificador C0–C4
+de cuatro niveles de autoridad, control de acceso con una sola traducción, recuperación
+híbrida (vectorial + BM25 + grafo) con RRF, re-ranking y umbral, GraphRAG con Neo4j y
+memoria, CAG con presupuesto, e ingesta incremental desde carpeta, SharePoint (delta) y S3.
+
+**Verificado:** una pregunta sobre un documento ingerido responde con su cita; el mismo
+query desde un usuario sin permiso no revela contenido, ni nombre, ni existencia —probado
+también contra **Qdrant real**. Cobertura `knowledge` 80.9 %.
+
+**Tres bugs reales**, dos de ellos invisibles para los tests unitarios porque sólo existían
+en la traducción al almacén real.
+
+**Siguiente:** F4 · conectores.
+
