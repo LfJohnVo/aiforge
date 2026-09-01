@@ -664,3 +664,31 @@ la comprobacion de capacidades contradiciendo a los constructores.
 **Los 15 puntos del Definition of Done tienen evidencia localizada**; los dos que dependen
 de credenciales de tenant o de un despliegue con datos se declaran como tales en la nota de
 sesion en vez de marcarse verdes.
+
+### D-071 · El generador ofrece dos modelos de aislamiento, por bandera
+
+**Contexto:** el override generado hacia `include` del compose base, que define **todos**
+los servicios. Levantarlo bajo otro nombre de proyecto clonaba el stack entero: cinco
+contenedores por area donde `DEPLOYMENT.md`, el RUNBOOK y el propio README generado
+prometian infraestructura compartida. Peor: el invariante 7 —`tenant_id` es parte de la
+clave en Redis, Postgres, Qdrant, Neo4j, NATS y ledger— existe **para** que las celulas
+compartan almacenes, y con un Postgres por instancia no estaba haciendo nada.
+
+**Decision:** las dos, elegibles.
+
+* `--shared` (`SHARED=1`): la instancia trae solo su celula y se une a las redes del stack
+  base. **Un** contenedor por area. El aislamiento es el namespacing, que es su proposito.
+* Por defecto: stack completo, almacenes propios. **Cinco** contenedores por area. Radio de
+  impacto mas duro; el namespacing pasa a ser defensa en profundidad.
+
+**Como, y por que asi:** el override compartido usa `extends` y no `include`. `include`
+arrastra todos los servicios —lo contrario de compartir—; `extends` copia una sola
+definicion de servicio con su healthcheck, su `cap_drop` y sus limites, de modo que sigue
+heredando los cambios del compose base sin heredar sus almacenes. Verificado midiendo lo
+que hace Compose, no leyendo su documentacion: `extends` **si** copia `networks` y
+`depends_on` (al reves de lo que se suele recordar), por eso el override declara las dos
+redes como externas y hace `depends_on: !reset []` — esperar a un servicio de otro proyecto
+no se resuelve nunca.
+
+Comprobado en vivo con tres celulas a la vez: `soc` compartido resuelve `postgres` a
+192.168.0.2, el mismo que la celula base, y `ventas` independiente al suyo en 192.168.48.2.

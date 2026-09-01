@@ -78,8 +78,12 @@ restart: ## Restart agent-api only
 	$(COMPOSE) restart agent-api
 
 # ------------------------------------------------------------------ product
-new-instance: ## make new-instance NAME=ventas TENANT=acme-mx
-	$(RUN) python scripts/new_instance.py --name "$(NAME)" --tenant "$(TENANT)"
+# SHARED=1 joins the base stack's infrastructure instead of cloning it: one container
+# per extra cell instead of five. The isolation is then the tenant_id + instance
+# namespacing every key already carries, which is what that namespacing is for.
+new-instance: ## make new-instance NAME=ventas TENANT=acme-mx [SHARED=1]
+	$(RUN) python scripts/new_instance.py --name "$(NAME)" --tenant "$(TENANT)" \
+		$(if $(SHARED),--shared,)
 
 new-connector: ## make new-connector NAME=servicenow
 	$(RUN) python scripts/new_connector.py --name "$(NAME)"

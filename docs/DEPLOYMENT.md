@@ -67,14 +67,48 @@ Y en CPU, los alias `local/fast` y `local/quality` apuntan a vLLM: sin GPU hay q
 
 ## 5. Varias células en el mismo host
 
+Dos modelos de aislamiento, y la diferencia se mide en contenedores.
+
+### Compartido — `SHARED=1`
+
 ```bash
-make new-instance NAME=ventas TENANT=acme-mx
-cd instances/acme-mx-ventas && docker compose up -d
+make up PROFILE=core                                  # el stack base, una vez
+make new-instance NAME=ventas TENANT=acme-mx SHARED=1
+cd instances/acme-mx-ventas
+docker compose --env-file ../../.env --env-file .env --profile core up -d
 ```
 
-El generador produce perfil, `.env` y override de Compose con nombres de proyecto,
-puertos y volúmenes únicos. El aislamiento lógico ya lo da el namespacing por
-`tenant_id` + `AGENT_FORGE_INSTANCE`; el override sólo evita colisiones de host.
+La instancia trae **sólo su célula** y se une a las redes del stack base. Postgres, Redis,
+Qdrant, NATS y LiteLLM son los del base. Lo que separa a dos instancias es que **cada clave
+lleva `tenant_id` + instancia**: para eso se construyó ese namespacing. Coste medido: **un
+contenedor** por área adicional.
+
+Para varias áreas de un mismo cliente.
+
+### Independiente — por defecto
+
+```bash
+make new-instance NAME=ventas TENANT=acme-mx
+```
+
+La instancia clona el stack entero, almacenes incluidos. Radio de impacto más duro —una
+base corrupta no toca a la vecina— a cambio de **cinco contenedores** por área. El
+namespacing sigue ahí, pero como defensa en profundidad y no como la frontera.
+
+Para tenants que exigen separación física, o cuando la carga de un área no debe poder
+ahogar a otra.
+
+### Lo que comparten los dos
+
+El generador produce perfil, `.env`, override de Compose y README, con nombres de proyecto,
+puertos y volúmenes de evidencia únicos. **Ninguno toca código**: hay un test que lo
+comprueba comparando las marcas de tiempo de `src/`.
+
+El override compartido usa `extends` y no `include`. `include` arrastra *todos* los
+servicios, así que levantarlo bajo otro nombre de proyecto clona el stack —lo contrario de
+compartir—; `extends` copia una sola definición de servicio, con su healthcheck, su
+`cap_drop` y sus límites, de modo que sigue heredando los cambios del compose base sin
+heredar sus almacenes.
 
 ## 6. Producción
 

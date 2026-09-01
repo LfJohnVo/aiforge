@@ -82,6 +82,94 @@ def test_the_generated_compose_includes_rather_than_copies(generated: Path) -> N
     assert "build" not in compose["services"]["agent-api"]
 
 
+# ------------------------------------------------- shared-infrastructure mode
+
+
+class _ComposeLoader(yaml.SafeLoader):
+    """A loader that tolerates Compose's own YAML tags.
+
+    `!reset` and `!override` are Compose merge directives, not standard YAML, so
+    `safe_load` refuses the file outright. They are load-bearing here -- `!reset` on
+    `depends_on` is what stops the cell waiting for services another project owns -- so the
+    test reads them rather than avoiding them.
+    """
+
+
+_ComposeLoader.add_constructor(
+    "!reset", lambda loader, node: loader.construct_sequence(node) if node.value else []
+)
+_ComposeLoader.add_constructor(
+    "!override", lambda loader, node: loader.construct_sequence(node)
+)
+
+
+def _compose(path: Path) -> dict:
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=_ComposeLoader)  # noqa: S506
+
+
+@pytest.fixture
+def shared(tmp_path: Path) -> Path:
+    from scripts.new_instance import main
+
+    argv = ["--name", "soc", "--tenant", "acme-mx", "--shared", "--root", str(tmp_path)]
+    assert main(argv) == 0
+    return tmp_path / "acme-mx-soc"
+
+
+def test_a_shared_instance_brings_no_datastore_of_its_own(shared: Path) -> None:
+    """The whole point of the mode, and the thing that was silently wrong before.
+
+    `include` pulls in every service, so bringing the instance up under its own project
+    name cloned the entire stack -- five containers where one was promised, and the
+    tenant_id namespacing that exists to let cells share stores did nothing.
+    """
+    compose = _compose(shared / "docker-compose.yml")
+
+    assert "include" not in compose
+    assert set(compose["services"]) == {"agent-api", "ingestion-worker"}
+    for service in compose["services"].values():
+        assert "extends" in service
+
+
+def test_a_shared_instance_joins_the_base_stacks_networks(shared: Path) -> None:
+    compose = _compose(shared / "docker-compose.yml")
+
+    for name in ("frontend", "backend"):
+        assert compose["networks"][name]["external"] is True
+        assert "BASE_COMPOSE_PROJECT" in compose["networks"][name]["name"]
+    assert "BASE_COMPOSE_PROJECT=" in (shared / ".env").read_text(encoding="utf-8")
+
+
+def test_a_shared_instance_waits_on_nothing_it_does_not_own(shared: Path) -> None:
+    """`extends` copies depends_on, and waiting on a service in another project hangs."""
+    text = (shared / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "depends_on: !reset []" in text
+
+
+def test_a_shared_instance_still_keeps_its_own_evidence_chain(shared: Path) -> None:
+    """Two instances writing one chain fork it, and a forked chain fails verification."""
+    compose = _compose(shared / "docker-compose.yml")
+
+    assert compose["volumes"]["ledger-data"]["name"] == "acme-mx-soc-ledger"
+
+
+def test_the_two_modes_are_the_only_difference(tmp_path: Path) -> None:
+    """Same profile, same port allocation, same README structure -- only the topology."""
+    from scripts.new_instance import main
+
+    main(["--name", "soc", "--tenant", "acme", "--root", str(tmp_path / "std")])
+    main(["--name", "soc", "--tenant", "acme", "--shared", "--root", str(tmp_path / "sh")])
+
+    for name in (".env", "docker-compose.yml", "README.md", "agent.profile.yaml"):
+        assert (tmp_path / "std" / "acme-soc" / name).is_file(), name
+        assert (tmp_path / "sh" / "acme-soc" / name).is_file(), name
+
+    std_profile = (tmp_path / "std" / "acme-soc" / "agent.profile.yaml").read_text("utf-8")
+    shared_profile = (tmp_path / "sh" / "acme-soc" / "agent.profile.yaml").read_text("utf-8")
+    assert std_profile == shared_profile
+
+
 def test_the_generated_compose_only_names_services_that_exist(generated: Path) -> None:
     """An override for a service the base file does not define is silently inert."""
     base = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))

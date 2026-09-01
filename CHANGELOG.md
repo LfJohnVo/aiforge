@@ -17,6 +17,14 @@ Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versionado
   evidencia por casilla.
 
 ### Fixed
+- **Una segunda instancia clonaba el stack entero.** El override generado hacia `include`
+  del compose base, que define todos los servicios, asi que cada area costaba cinco
+  contenedores donde tres paginas de documentacion prometian infraestructura compartida
+  —y el namespacing por `tenant_id`, que existe precisamente para que las celulas
+  compartan almacenes, no estaba haciendo nada. `make new-instance ... SHARED=1` genera
+  ahora un override con `extends` que trae solo la celula: **un** contenedor por area. Sin
+  la bandera se conserva el stack completo, que es el modelo correcto cuando un tenant
+  exige separacion fisica.
 - **El perfil `core` no arrancaba**: `check_capabilities` avisaba en desarrollo mientras
   `build_vector_store` y `build_graph_store` lanzaban igualmente, y la imagen de API no
   lleva el extra `knowledge` por diseno (ADR-005). Ahora degradan en desarrollo y siguen

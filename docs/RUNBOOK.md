@@ -196,11 +196,22 @@ defecto en Windows.
 ## 8. Segunda célula en el mismo host
 
 ```bash
+# Compartiendo la infraestructura del stack base: un contenedor mas.
+make up PROFILE=core
+make new-instance NAME=ventas TENANT=acme-mx SHARED=1
+
+# O con su propio stack completo: cinco contenedores mas.
 make new-instance NAME=ventas TENANT=acme-mx
+
 cd instances/acme-mx-ventas
 docker compose --env-file ../../.env --env-file .env --profile core up -d
 curl -s http://127.0.0.1:8180/health/ready | jq
 ```
+
+Cuál elegir está en [`DEPLOYMENT.md`](DEPLOYMENT.md) §5. En modo compartido, el `.env` de la
+instancia lleva `BASE_COMPOSE_PROJECT`: es el nombre de proyecto del stack base, del que
+cuelgan las redes a las que se une. Compose lo deriva del directorio desde el que corres el
+comando, así que desde la raíz del repositorio es el nombre de la carpeta.
 
 Los dos `--env-file` y en ese orden: el del repositorio trae la infraestructura compartida
 y sus secretos, el de la instancia sólo lo que la hace distinta. El generador no toca
