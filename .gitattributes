@@ -1,0 +1,9 @@
+# The repository runs in Linux containers; LF everywhere avoids shebang and
+# heredoc breakage regardless of the developer's platform.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
+uv.lock -diff linguist-generated
+docs/graphs/* linguist-generated
+docs/REPO_MAP.md linguist-generated
