@@ -6,7 +6,6 @@
         "code-review-graph",
         "serve"
       ],
-      "cwd": "E:\\programs\\laragon\\contenedores\\agentforge",
       "type": "stdio"
     }
   }

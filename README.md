@@ -138,3 +138,7 @@ curl -N localhost:8080/v1/chat/completions \
 ## Licencia
 
 Apache-2.0 — ver [LICENSE](LICENSE).
+
+## Retomar en otra máquina
+
+[`docs/memory/HANDOFF.md`](docs/memory/HANDOFF.md): estado medido, prerequisitos exactos, los siete valores que hay que rellenar en `.env`, las trampas del entorno que ya costaron tiempo y el orden de lectura.
