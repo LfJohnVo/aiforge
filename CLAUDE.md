@@ -158,6 +158,7 @@ Definition of Done global: sección 12 del mismo documento.
 | Por qué se decidió X | `docs/adr/` y `docs/memory/DECISIONS_LOG.md` |
 | Qué se hizo en cada sesión | `docs/memory/SESSION_NOTES/` |
 | Cómo retomar esto en otra máquina | `docs/memory/HANDOFF.md` |
+| Cómo llevarlo a producción y montar la PoC | `docs/PRODUCTION_PLAN.md` |
 | Qué está sin resolver | `docs/memory/OPEN_QUESTIONS.md` |
 | Cómo se opera esto | `docs/RUNBOOK.md` |
 | Cómo añadir un conector / canal / subgrafo | `docs/CONNECTORS.md` · `docs/CHANNELS.md` · `CONTRIBUTING.md` |

@@ -692,3 +692,24 @@ no se resuelve nunca.
 
 Comprobado en vivo con tres celulas a la vez: `soc` compartido resuelve `postgres` a
 192.168.0.2, el mismo que la celula base, y `ventas` independiente al suyo en 192.168.48.2.
+
+### D-072 · La misión está cerrada; el trabajo siguiente lo rige `docs/PRODUCTION_PLAN.md`
+
+**Contexto:** con `FORGE_DONE` emitido, la pregunta pasó a ser cómo llevar la célula a
+producción y montar una PoC en la máquina de desarrollo. Revisión completa del 2026-09-07
+sobre `9305458`: gate `make check` verde (670 tests) tras corregir un fallo de formato que
+`c8275ba` tenía commiteado; DoD 15/15 con evidencia; diez hallazgos, ninguno un bug
+funcional: dos discrepancias documentación-código (`DEPLOYMENT.md` §6 promete un modo
+producción que sólo apaga `/docs`; `EMBEDDING_MODEL`/`RERANK_MODEL` no se leen), el alias
+`local/embeddings` sin backend en ningún perfil, reranker sólo léxico, sin límite de tasa,
+sin pipeline de release, sin alertas, Helm sin `NetworkPolicy`, y un `gpu.override` con
+imagen no cacheada y una sola variable para modelo y nombre servido.
+
+**Decisión:** el plan vive en `docs/PRODUCTION_PLAN.md` con cuatro rutas —A PoC local, B
+endurecer el repo, C infraestructura, D piloto—, estado medido, decisiones pendientes y
+riesgos. Dos supuestos provisionales que el plan asume hasta que alguien los contradiga:
+**producción v1 es una célula standalone** (OPA, NATS, juez, agregador y ledger propios; la
+plataforma PEAK se enchufa por configuración cuando exista) y **el destino es AWS/EKS** por
+ser la huella existente. La máquina de desarrollo tiene GPU (RTX 5060 Ti 16 GB, passthrough
+a Docker verificado), así que la PoC usa el perfil `full` con vLLM y Qwen3-8B-FP8, cosa que
+el HANDOFF descartaba.

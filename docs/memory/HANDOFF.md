@@ -1,6 +1,6 @@
 # Traspaso a otra máquina
 
-> Última medición: 2026-09-02, commit `c26f196`, rama `main`, árbol limpio.
+> Última medición: 2026-09-07, commit `9305458`, rama `main`, árbol limpio.
 > Este documento existe para que la siguiente sesión **no dependa de la memoria de nadie**.
 > Si algo aquí contradice al código, manda el código: corrige este fichero.
 
@@ -10,10 +10,14 @@
 Definition of Done de su sección 12 tiene los 15 puntos con evidencia localizada. El
 mensaje `FORGE_DONE` ya se emitió.
 
+Lo que sigue —la PoC en la máquina de desarrollo y el paso a producción— está en
+`docs/PRODUCTION_PLAN.md`, con el estado medido el 2026-09-07 y los hallazgos de esa
+revisión.
+
 | | |
 |---|---|
-| Commits | 14, uno por unidad lógica |
-| Tests | 664 unit + policy · 28 de integración · 1 saltado (stdio MCP en win32) |
+| Commits | 16 hasta `9305458`, uno por unidad lógica |
+| Tests | 670 unit + policy · 28 de integración · 1 saltado (stdio MCP en win32) |
 | Cobertura | global 82.4 % · `core` 85.7 % · `governance` 94.8 % · `knowledge` 80.2 % |
 | ADRs | 9 (+ plantilla) |
 | Decisiones | 71 en `docs/memory/DECISIONS_LOG.md`, una entrada por fase |
@@ -25,7 +29,9 @@ Lo que **no** está hecho, y por qué —ninguno es un fallo del código:
 * **Ingesta desde SharePoint**: el adaptador existe y está probado contra su contrato,
   pero verificarlo de verdad necesita credenciales de un tenant real. El propio DoD lo
   reconoce al escribir «(con credenciales)».
-* **Perfil `full` con vLLM**: pide GPU. En CPU se usa `local/dev` o `local/tiny`.
+* **Perfil `full` con vLLM**: pide GPU. En CPU se usa `local/dev` o `local/tiny`. La
+  máquina de desarrollo actual **sí** tiene una (RTX 5060 Ti 16 GB, passthrough a
+  Docker verificado): `docs/PRODUCTION_PLAN.md` §1 y §3 dicen cómo usarla.
 * **Restauración de respaldos**: el procedimiento está en el RUNBOOK; probarlo necesita un
   despliegue con datos.
 
@@ -144,8 +150,8 @@ del grafo tras cada edición. Si molesta, se quita de ahí.
 
 ## 8. Antes de irte de esta máquina
 
-Quedan **12 contenedores de demostración** levantados de la verificación del 2026-09-02.
-No hacen falta para nada:
+Quedan **12 contenedores de demostración** de la verificación del 2026-09-02, parados
+(`Exited`) pero no eliminados, con sus volúmenes. No hacen falta para nada:
 
 ```bash
 docker compose -p demo -f deploy/compose/docker-compose.yml down -v
