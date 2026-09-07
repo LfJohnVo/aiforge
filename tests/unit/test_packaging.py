@@ -98,9 +98,7 @@ class _ComposeLoader(yaml.SafeLoader):
 _ComposeLoader.add_constructor(
     "!reset", lambda loader, node: loader.construct_sequence(node) if node.value else []
 )
-_ComposeLoader.add_constructor(
-    "!override", lambda loader, node: loader.construct_sequence(node)
-)
+_ComposeLoader.add_constructor("!override", lambda loader, node: loader.construct_sequence(node))
 
 
 def _compose(path: Path) -> dict:
