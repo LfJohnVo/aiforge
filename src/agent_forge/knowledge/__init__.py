@@ -35,6 +35,7 @@ from agent_forge.knowledge.graphrag import GraphStore, build_graph_store
 from agent_forge.knowledge.ingestion import IngestionPipeline, IngestionReport
 from agent_forge.knowledge.rag import (
     Embeddings,
+    GatewayReranker,
     HybridRetriever,
     RetrievalRequest,
     VectorStore,
@@ -179,7 +180,23 @@ def build_knowledge(
         api_key=source.get("QDRANT_API_KEY", ""),
         strict=source.get("AGENT_FORGE_ENV", "development") == "production",
     )
-    embedder = embeddings or build_embeddings(gateway)
+    production = source.get("AGENT_FORGE_ENV", "development") == "production"
+    # Which alias serves embeddings and reranking is deployment shape, not profile: the
+    # same profile runs against vLLM on a GPU host and against Ollama on a laptop.
+    embedder = embeddings or build_embeddings(
+        gateway,
+        alias=source.get("EMBEDDING_MODEL") or "local/embeddings",
+        strict=production,
+    )
+    # No RERANK_MODEL means the lexical reranker, which is a deliberate default rather
+    # than an omission: it needs no second model and keeps the retrieve-wide-then-narrow
+    # shape identical in every environment.
+    rerank_alias = source.get("RERANK_MODEL", "").strip()
+    reranker = (
+        GatewayReranker(gateway, alias=rerank_alias)
+        if rerank_alias and gateway is not None
+        else None
+    )
     graph = (
         graph_store
         if graph_store is not None
@@ -196,6 +213,7 @@ def build_knowledge(
         store,
         embedder,
         graph=graph,
+        reranker=reranker,
         hybrid=knowledge.rag.hybrid,
         rerank=knowledge.rag.rerank,
     )

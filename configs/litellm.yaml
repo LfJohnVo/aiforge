@@ -62,7 +62,12 @@ model_list:
         max_classification: C4
 
   # Embeddings y rerank: SIEMPRE locales. Enviar contenido C2+ a un servicio
-  # externo de embeddings es la fuga que mas facil se pasa por alto.
+  # externo de embeddings es la fuga que mas facil se pasa por alto. Y el reranker es
+  # peor todavia: un cross-encoder lee la pregunta y el chunk completo, juntos.
+  #
+  # Cual de estos alias se usa lo eligen EMBEDDING_MODEL y RERANK_MODEL, porque es una
+  # decision de despliegue y no de perfil: el mismo perfil corre contra vLLM en un host
+  # con GPU y contra Ollama en un portatil.
   - model_name: local/embeddings
     litellm_params:
       model: hosted_vllm/BAAI/bge-m3
@@ -70,6 +75,31 @@ model_list:
       api_key: "not-needed"
     model_info:
       mode: embedding
+      metadata:
+        sovereignty: local
+        max_classification: C4
+
+  # Embeddings sin GPU. Un vLLM sirve un modelo, asi que en una maquina con una sola
+  # tarjeta el chat se lleva la GPU y los embeddings los sirve Ollama: 1.2 GB, las
+  # mismas 1024 dimensiones que bge-m3 en vLLM, asi que un corpus indexado con uno se
+  # puede reindexar con el otro sin recrear la coleccion.
+  - model_name: local/embeddings-dev
+    litellm_params:
+      model: ollama/bge-m3
+      api_base: os.environ/OLLAMA_BASE_URL
+    model_info:
+      mode: embedding
+      metadata:
+        sovereignty: local
+        max_classification: C4
+
+  - model_name: local/rerank
+    litellm_params:
+      model: hosted_vllm/BAAI/bge-reranker-v2-m3
+      api_base: os.environ/VLLM_BASE_URL
+      api_key: "not-needed"
+    model_info:
+      mode: rerank
       metadata:
         sovereignty: local
         max_classification: C4

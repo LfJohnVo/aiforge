@@ -75,6 +75,8 @@ class ModelTransport(Protocol):
 
     async def embed(self, texts: Sequence[str], model: str) -> list[list[float]]: ...
 
+    async def rerank(self, query: str, documents: Sequence[str], model: str) -> list[float]: ...
+
     async def health(self) -> bool: ...
 
     async def aclose(self) -> None: ...
@@ -203,6 +205,49 @@ class LiteLLMTransport:
         # Providers are not required to preserve request order; `index` is authoritative.
         ordered = sorted(data, key=lambda item: int(item.get("index", 0)))
         return [[float(x) for x in item.get("embedding", [])] for item in ordered]
+
+    async def rerank(self, query: str, documents: Sequence[str], model: str) -> list[float]:
+        """Relevance of each document to the query, in the order the documents were given.
+
+        A cross-encoder reads query and document together, which is what makes it better
+        than the cosine of two independent vectors -- and also what makes it a leak if it
+        runs anywhere but on our own infrastructure: the endpoint sees the full text of
+        every candidate chunk. Sovereignty is enforced by the caller in
+        ``GovernedGateway.rerank``; this is only the wire.
+        """
+        if not documents:
+            return []
+        try:
+            response = await self._client.post(
+                "/v1/rerank",
+                json={
+                    "model": model,
+                    "query": query,
+                    "documents": list(documents),
+                    "top_n": len(documents),
+                },
+            )
+            response.raise_for_status()
+            body = response.json()
+        except httpx.HTTPStatusError as exc:
+            raise ModelGatewayError(
+                "rerank backend rejected the request",
+                model=model,
+                status=exc.response.status_code,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ModelGatewayError(
+                "rerank backend unreachable", model=model, detail=str(exc)
+            ) from exc
+
+        # The response carries only the documents the backend kept, each with its
+        # original index. Anything it dropped scores zero rather than shifting the list.
+        scores = [0.0] * len(documents)
+        for item in body.get("results") or []:
+            index = int(item.get("index", -1))
+            if 0 <= index < len(scores):
+                scores[index] = float(item.get("relevance_score", 0.0))
+        return scores
 
     async def health(self) -> bool:
         try:
@@ -360,6 +405,24 @@ class GovernedGateway:
         decision = self.route(classification, preferred, purpose="embedding")
         self._policy.assert_allowed(decision.alias, classification)
         return await self._transport.embed(texts, decision.alias)
+
+    async def rerank(
+        self,
+        query: str,
+        documents: Sequence[str],
+        *,
+        classification: Classification,
+        preferred: Sequence[str] = ("local/rerank",),
+    ) -> list[float]:
+        """Rerank under the same sovereignty rules as any other model call.
+
+        The candidate chunks handed to a reranker are the *retrieved* ones, so their
+        accumulated classification is at least as high as anything the answer will
+        contain. An external reranker would see all of it.
+        """
+        decision = self.route(classification, preferred, purpose="rerank")
+        self._policy.assert_allowed(decision.alias, classification)
+        return await self._transport.rerank(query, documents, decision.alias)
 
     async def health(self) -> bool:
         return await self._transport.health()

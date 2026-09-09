@@ -20,8 +20,9 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from agent_forge.core.classification import Classification
-from agent_forge.core.errors import ModelGatewayError
+from agent_forge.core.errors import ModelGatewayError, SovereigntyError
 from agent_forge.core.state import Identity
+from agent_forge.gateway.litellm_client import GovernedGateway
 from agent_forge.knowledge.access_control import AccessFilter, PolicyView, build_filter
 from agent_forge.knowledge.documents import Chunk, RetrievalResult
 from agent_forge.knowledge.rag.embeddings import Embeddings
@@ -266,6 +267,61 @@ class Reranker(Protocol):
     ) -> list[RetrievalResult]: ...
 
 
+class GatewayReranker:
+    """Cross-encoder reranking through the model gateway.
+
+    Better than `LexicalReranker` because a cross-encoder reads the query and the chunk
+    together, so it scores "does this passage answer this question" rather than "do these
+    share words". It costs a model call over every candidate, which is why it reranks a
+    shortlist and not the corpus.
+
+    It degrades rather than fails: a reranker that is down should cost result *quality*,
+    not the answer. The fused RRF order is already a reasonable ranking, so that is what
+    the caller gets, and the event says so.
+    """
+
+    def __init__(
+        self,
+        gateway: GovernedGateway,
+        *,
+        alias: str = "local/rerank",
+        fallback: Reranker | None = None,
+    ) -> None:
+        self._gateway = gateway
+        self._alias = alias
+        self._fallback = fallback or LexicalReranker()
+
+    async def rerank(
+        self, query: str, results: Sequence[RetrievalResult], *, limit: int
+    ) -> list[RetrievalResult]:
+        if not results:
+            return []
+        # The candidates carry the classification the answer will inherit; routing on the
+        # accumulated maximum is what keeps a C3 chunk away from an external reranker.
+        classification = max((r.chunk.classification for r in results), default=Classification.C0)
+        try:
+            scores = await self._gateway.rerank(
+                query,
+                [r.chunk.text for r in results],
+                classification=classification,
+                preferred=(self._alias,),
+            )
+        except (ModelGatewayError, SovereigntyError) as exc:
+            log.error(
+                "rerank.degraded_to_lexical",
+                detail=str(exc),
+                impact="results keep their fused order; relevance is weaker than configured",
+            )
+            return await self._fallback.rerank(query, results, limit=limit)
+
+        rescored = [
+            RetrievalResult(chunk=result.chunk, score=score, retriever="reranked")
+            for result, score in zip(results, scores, strict=False)
+        ]
+        rescored.sort(key=lambda r: r.score, reverse=True)
+        return rescored[:limit]
+
+
 class LexicalReranker:
     """Term-coverage reranker, used when no cross-encoder is available.
 
@@ -285,9 +341,11 @@ class LexicalReranker:
 
         rescored: list[RetrievalResult] = []
         for result in results:
+            # A chunk that tokenizes to nothing -- all stopwords, a table of symbols, a
+            # script this tokenizer does not split -- scores zero and sinks. It is not
+            # dropped: a reranker reorders candidates, and one that silently removes
+            # them turns a retrieval that found something into an answer with no source.
             tokens = tokenize(result.chunk.text)
-            if not tokens:
-                continue
             present = wanted & set(tokens)
             coverage = len(present) / len(wanted)
             rescored.append(

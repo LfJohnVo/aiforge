@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from agent_forge.core.classification import Classification
-from agent_forge.core.errors import ModelGatewayError
+from agent_forge.core.errors import CapabilityUnavailableError, ModelGatewayError
 from agent_forge.gateway.litellm_client import GovernedGateway
 from agent_forge.observability.logging import get_logger
 
@@ -150,9 +150,22 @@ def build_embeddings(
     *,
     alias: str = "local/embeddings",
     dimension: int = DEFAULT_DIM,
+    strict: bool = False,
 ) -> Embeddings:
-    """The gateway when there is one, hashing otherwise -- and say which, loudly."""
+    """The gateway when there is one, hashing otherwise -- and say which, loudly.
+
+    ``strict`` (production) makes the absence fatal. The hashing embedder is a genuine
+    fallback -- retrieval still returns something -- and that is exactly what makes it
+    dangerous here: a cell that silently answers from lexical overlap looks like a
+    working RAG until someone asks a question in different words than the document used.
+    A warning in a log nobody greps is not enough for that.
+    """
     if gateway is None:
+        if strict:
+            raise CapabilityUnavailableError(
+                "no model gateway, so retrieval would fall back to lexical hashing",
+                hint="configure LITELLM_BASE_URL, or run with AGENT_FORGE_ENV=development",
+            )
         log.warning(
             "embeddings.hashing_selected",
             detail="no model gateway; lexical similarity only, paraphrases will not match",
@@ -174,5 +187,9 @@ async def safe_embed(
     except ModelGatewayError as exc:
         if fallback is None:
             raise
-        log.warning("embeddings.degraded_to_fallback", detail=str(exc))
+        log.error(
+            "embeddings.degraded_to_fallback",
+            detail=str(exc),
+            impact="these chunks are indexed lexically and will not match paraphrases",
+        )
         return await fallback.embed(texts)

@@ -38,6 +38,12 @@ EXTERNAL = ModelBackend("anthropic/claude", Sovereignty.EXTERNAL, Classification
 LOCAL_EMBEDDINGS = ModelBackend(
     "local/embeddings", Sovereignty.LOCAL, Classification.C4, purpose="embedding"
 )
+LOCAL_RERANK = ModelBackend("local/rerank", Sovereignty.LOCAL, Classification.C4, purpose="rerank")
+# A hosted reranker exists in the wild (Cohere, Jina) and someone will be tempted: a
+# cross-encoder sees the query and every candidate chunk in full.
+EXTERNAL_RERANK = ModelBackend(
+    "cohere/rerank", Sovereignty.EXTERNAL, Classification.C2, purpose="rerank"
+)
 
 
 @dataclass
@@ -74,6 +80,10 @@ class FakeTransport:
         """Deterministic two-dimensional vectors; subclasses override for detail."""
         return [[float(len(text)), 1.0] for text in texts]
 
+    async def rerank(self, query: str, documents: Sequence[str], model: str) -> list[float]:
+        """Scores descending by position, so a test can tell reranked order from fused."""
+        return [1.0 - (i / max(len(documents), 1)) for i in range(len(documents))]
+
     async def health(self) -> bool:
         return self.healthy
 
@@ -106,7 +116,7 @@ def fake_retriever(
 
 
 def make_policy() -> ModelPolicy:
-    return ModelPolicy([LOCAL_FAST, LOCAL_QUALITY, EXTERNAL, LOCAL_EMBEDDINGS])
+    return ModelPolicy([LOCAL_FAST, LOCAL_QUALITY, EXTERNAL, LOCAL_EMBEDDINGS, LOCAL_RERANK])
 
 
 def make_gateway(

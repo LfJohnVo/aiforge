@@ -13,6 +13,7 @@ from agent_forge.knowledge.rag.embeddings import (
 )
 from agent_forge.knowledge.rag.retriever import (
     BM25Index,
+    GatewayReranker,
     GraphRetriever,
     HybridRetriever,
     LexicalReranker,
@@ -39,6 +40,7 @@ __all__ = [
     "BM25Index",
     "Embeddings",
     "GatewayEmbeddings",
+    "GatewayReranker",
     "GraphRetriever",
     "HashingEmbeddings",
     "HybridRetriever",
