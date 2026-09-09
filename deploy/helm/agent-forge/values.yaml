@@ -136,6 +136,73 @@ probes:
     periodSeconds: 15
     failureThreshold: 3
 
+# Sin esto, el default de Kubernetes es permitir todo en las dos direcciones: el
+# equivalente de dejar la red `backend` del Compose sin `internal: true`.
+#
+# El egress no incluye salida a internet a proposito. Si la celula tiene que hablar con un
+# modelo externo lo hace via LiteLLM, que es un destino del cluster; la salida la tiene
+# LiteLLM, en un solo sitio, igual que la decision de soberania.
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+  # Cada destino con su puerto. Ajustar a los servicios reales del namespace.
+  egressTo:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - {port: 5432, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - {port: 6379, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qdrant
+      ports:
+        - {port: 6333, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nats
+      ports:
+        - {port: 4222, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: litellm
+      ports:
+        - {port: 4000, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opa
+      ports:
+        - {port: 8181, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+      ports:
+        - {port: 4317, protocol: TCP}
+
+# Un drain durante el mantenimiento de un nodo no debe llevarse todas las replicas. Se
+# emite solo con replicaCount > 1: un PDB de minAvailable 1 sobre una sola replica bloquea
+# el drain para siempre.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

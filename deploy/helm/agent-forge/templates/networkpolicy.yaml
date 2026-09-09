@@ -1,0 +1,54 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /*
+El equivalente en Kubernetes de `backend: internal: true` del Compose, y por la misma
+razón: una célula que puede abrir una conexión a cualquier sitio es una célula desde la
+que se puede exfiltrar. Aquí no basta con no configurarlo -- sin NetworkPolicy, el default
+de Kubernetes es permitir todo en las dos direcciones.
+
+El egress es una **allowlist de puertos hacia el propio clúster**, más DNS. Lo que
+deliberadamente NO incluye es salida a internet: si esta célula tiene que hablar con un
+modelo externo lo hace a través de LiteLLM, que es un destino del clúster, y es LiteLLM
+--un único punto -- quien tiene la salida. Ese es el mismo diseño que hace que la decisión
+de soberanía viva en un solo sitio.
+*/ -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "agent-forge.fullname" . }}
+  labels: {{- include "agent-forge.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "agent-forge.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+
+  ingress:
+    # Sólo el ingress controller y el scrape de métricas. Nada de tráfico lateral entre
+    # pods: una célula no tiene por qué recibir conexiones de otra.
+    - from:
+        {{- range .Values.networkPolicy.ingressFrom }}
+        - {{ toYaml . | nindent 10 | trim }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.service.port }}
+          protocol: TCP
+
+  egress:
+    # DNS. Sin esto no resuelve ni el nombre de Postgres, y el síntoma --timeouts en todo--
+    # no se parece en nada a la causa.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+    {{- range .Values.networkPolicy.egressTo }}
+    - to:
+        {{- toYaml .to | nindent 8 }}
+      ports:
+        {{- toYaml .ports | nindent 8 }}
+    {{- end }}
+{{- end }}

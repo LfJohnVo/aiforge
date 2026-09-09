@@ -1,0 +1,23 @@
+{{- if and .Values.podDisruptionBudget.enabled (gt (int .Values.replicaCount) 1) }}
+{{- /*
+Sin esto, un `kubectl drain` durante el mantenimiento de un nodo puede llevarse todas las
+réplicas a la vez, y el HPA no ayuda: tardará en reponerlas más de lo que dura la caída.
+
+Se declara sólo con más de una réplica. Un PDB con `minAvailable: 1` sobre un Deployment de
+una réplica **bloquea el drain para siempre**, que es cómo se descubre a las tres de la
+mañana que el nodo no se puede vaciar.
+*/ -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "agent-forge.fullname" . }}
+  labels: {{- include "agent-forge.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "agent-forge.selectorLabels" . | nindent 6 }}
+{{- end }}

@@ -1,0 +1,78 @@
+# Valores de produccion. `helm upgrade -f values.yaml -f values-prod.yaml`.
+#
+# Lo que cambia respecto al default no es "mas grande": es que en produccion las cosas que
+# en desarrollo avisan, aqui fallan. Empezando por la propia celula, que se niega a
+# arrancar si le falta OIDC (ver runtime.enforce_production_settings).
+
+image:
+  # Por digest, no por tag. Un tag movil convierte un rollback en una loteria: el mismo
+  # tag puede apuntar a otra imagen manana. El pipeline de release (B5) lo firma con cosign
+  # y publica el digest.
+  tag: ""          # se sustituye por el digest en el despliegue
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+env:
+  AGENT_FORGE_ENV: production
+  LOG_LEVEL: INFO
+  # Sin esto la celula no arranca. Es deliberado: una API key identifica al tenant, no a
+  # la persona, y sin persona la recuperacion por identidad no tiene por donde filtrar.
+  OIDC_ISSUER: ""
+  OIDC_JWKS_URL: ""
+  OIDC_AUDIENCE: agent-forge
+  RATE_LIMIT_PER_MINUTE: "120"
+  EMBEDDING_MODEL: local/embeddings
+  RERANK_MODEL: local/rerank
+
+secrets:
+  # El chart espera un Secret que ya existe; no lo crea. En produccion lo materializa
+  # External Secrets desde el gestor de la plataforma, de modo que ningun secreto pasa por
+  # el values ni por el historial de Helm.
+  existingSecret: agent-forge-secrets
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # El cuerpo de una peticion de chat es pequenio; subirlo solo amplia la superficie.
+    nginx.ingress.kubernetes.io/proxy-body-size: 1m
+  hosts:
+    - host: celula.ejemplo.test
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: agent-forge-tls
+      hosts: [celula.ejemplo.test]
+
+resources:
+  requests: {cpu: 1, memory: 2Gi}
+  limits: {memory: 4Gi}
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+
+ledger:
+  enabled: true
+  size: 50Gi
+
+observability:
+  serviceMonitor:
+    enabled: true
+
+maintenance:
+  enabled: true
+  schedule: "0 3 * * *"
