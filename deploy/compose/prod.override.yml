@@ -1,0 +1,118 @@
+# Override de producción sobre Compose, para el camino VM / on-prem.
+#
+#   docker compose -f deploy/compose/docker-compose.yml \
+#                  -f deploy/compose/prod.override.yml --env-file .env \
+#                  --profile full up -d
+#
+# Kubernetes tiene su propio camino en `deploy/helm/` con `values-prod.yaml`. Este fichero
+# es para quien despliega una célula en una máquina, que es la mayoría de las primeras
+# instalaciones.
+#
+# Lo que cambia respecto a desarrollo no es "más grande". Es que aquí las cosas que en
+# desarrollo avisan, fallan; y que nada escucha en una interfaz pública salvo el proxy.
+
+services:
+  # ------------------------------------------------------------------ el borde
+  #
+  # Lo único con un puerto publicado. Termina TLS y habla con la célula por la red
+  # interna: `agent-api` deja de publicar el 8080 (ver más abajo), así que no hay forma
+  # de saltarse este proxy desde fuera del host.
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    profiles: [core, full]
+    ports:
+      - "443:443"
+      - "80:80"          # sólo para el desafío ACME y la redirección a HTTPS
+    volumes:
+      - ../proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data          # certificados: perderlos es volver a pedirlos
+      - caddy-config:/config
+    environment:
+      AGENT_DOMAIN: ${AGENT_DOMAIN:?falta AGENT_DOMAIN, el nombre público de la célula}
+      ACME_EMAIL: ${ACME_EMAIL:?falta ACME_EMAIL para los avisos de caducidad}
+    networks: [frontend]
+    depends_on:
+      agent-api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2019/config/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  agent-api:
+    # Sin puertos. `!override` con lista vacía y no una omisión: Compose fusiona listas,
+    # así que omitir `ports` conservaría el 8080 del fichero base y todo esto sería
+    # decorativo.
+    ports: !override []
+    environment:
+      AGENT_FORGE_ENV: production
+      # Con esto puesto, la célula se niega a arrancar sin OIDC, con fail_mode
+      # permisivo sin confirmar, o con DEV_SHARED_SECRET presente. Es deliberado:
+      # ver runtime.enforce_production_settings.
+      LOG_FORMAT: json
+      AGENT_PUBLIC_URL: https://${AGENT_DOMAIN}
+    # El código y la configuración no se escriben en caliente. Lo que sí necesita escribir
+    # va a volúmenes o a tmpfs declarados.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    logging: &loki
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        # Promtail/Alloy recoge de aquí. Los logs de la célula ya son JSON con
+        # tenant_id y trace_id, así que no hay que parsear nada.
+        labels: "com.docker.compose.service"
+
+  ingestion-worker:
+    environment:
+      AGENT_FORGE_ENV: production
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777     # Docling desempaqueta aquí
+    logging: *loki
+
+  # ------------------------------------------------------------- los almacenes
+  #
+  # Ninguno publica puerto ni en producción ni en desarrollo --el fichero base ya los deja
+  # sólo en la red interna--, así que aquí sólo se endurecen y se les pone retención de
+  # logs. No llevan `read_only`: son precisamente los que escriben.
+  postgres:
+    logging: *loki
+    # Un backup que nadie ha restaurado no es un backup. El procedimiento está en
+    # RUNBOOK §4 y el simulacro es mensual.
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=512MB
+
+  redis:
+    logging: *loki
+
+  qdrant:
+    logging: *loki
+
+  litellm:
+    logging: *loki
+
+  opa:
+    logging: *loki
+
+  grafana:
+    # Detrás del proxy también. Un Grafana con puerto publicado y su contraseña por
+    # defecto es la puerta de atrás más común que existe.
+    ports: !override []
+    environment:
+      GF_SERVER_ROOT_URL: https://${AGENT_DOMAIN}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    logging: *loki
+
+volumes:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,46 @@
+# El único componente con un puerto público. Termina TLS y no hace nada más
+# interesante: cuanto menos lógica haya en el borde, menos hay que auditar en el borde.
+#
+# Caddy pide y renueva el certificado solo vía ACME. Si la célula no es alcanzable desde
+# internet en el 80 --lo normal en una red corporativa-- hay que cambiar a DNS-01 o poner
+# el certificado a mano; en ese caso, sustituye el bloque por `tls /ruta/cert /ruta/key`.
+
+{
+	email {$ACME_EMAIL}
+	# Sin el panel de administración expuesto: escucha en loopback para el healthcheck.
+	admin 127.0.0.1:2019
+}
+
+{$AGENT_DOMAIN} {
+	encode zstd gzip
+
+	# Cabeceras de seguridad. HSTS con un año: una vez servido, el navegador no vuelve a
+	# intentar HTTP, que es lo que cierra el downgrade.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Grafana bajo un subcamino, nunca en su propio puerto.
+	handle_path /grafana/* {
+		reverse_proxy grafana:3000
+	}
+
+	# `/metrics` es de Prometheus, que raspa por la red interna. Desde fuera no.
+	handle /metrics* {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy agent-api:8080 {
+			# El streaming SSE de /v1/chat/completions se rompe si el proxy almacena.
+			flush_interval -1
+			# La célula lee estas dos para construir el Agent Card y los callbacks.
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
+	}
+}

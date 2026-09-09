@@ -108,8 +108,12 @@ knowledge:
 # modelo concreto, para que cambiar de familia no toque los perfiles.
 # ------------------------------------------------------------------------------
 models:
-  fast: "local/fast"                    # ~7-14B, razonamiento rapido
-  quality: "local/quality"              # ~70B, calidad
+  # local/dev y no local/fast: vLLM no arranca bajo WSL2 (UVA no disponible; ver
+  # deploy/compose/gpu.override.yml), asi que en esta maquina el chat lo sirve Ollama
+  # sobre la misma GPU. En Linux nativo estos dos volverian a ser local/fast y
+  # local/quality sin tocar nada mas.
+  fast: "local/dev"                     # qwen3:8b en Ollama, sobre GPU
+  quality: "local/dev"                  # una sola tarjeta: no hay modelo grande aparte
   # Solo se usan con datos C0-C2 desensibilizados. C3/C4 jamas sale de aqui,
   # independientemente de lo que diga esta lista.
   external_allowed: ["anthropic/claude"]

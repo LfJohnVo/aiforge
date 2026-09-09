@@ -1,38 +1,61 @@
-# GPU override: swaps Ollama for vLLM with prefix caching.
+# Override de GPU. Da la tarjeta a Ollama y, donde se pueda, añade vLLM.
 #
 #   docker compose -f deploy/compose/docker-compose.yml \
-#                  -f deploy/compose/gpu.override.yml --profile serving up -d
+#                  -f deploy/compose/gpu.override.yml --env-file .env \
+#                  --profile serving up -d
 #
-# Requires the NVIDIA container toolkit on the host.
+# Requiere el NVIDIA Container Toolkit en el host.
 #
-# vLLM runs on `backend`, which is `internal: true`: no route off the host. That is
-# deliberate -- a store holding tenant data must not have egress -- and it means vLLM
-# CANNOT download its weights. Seed the cache once from a container that does have a
-# route, exactly as RUNBOOK §1.1 does for Ollama:
+# ------------------------------------------------------------------------------
+# vLLM NO ARRANCA BAJO WSL2 (Docker Desktop en Windows). Medido el 2026-09-09 con
+# vllm/vllm-openai:v0.27.1-cu129 sobre una RTX 5060 Ti:
 #
-#   docker run --rm -v <proyecto>_vllm-cache:/root/.cache/huggingface #     --entrypoint hf ${VLLM_IMAGE} download ${VLLM_MODEL}
+#   RuntimeError: UVA is not available
 #
-# Without it the container starts, fails to resolve huggingface.co and looks like a
-# broken GPU setup.
+# El motor V1 de vLLM --el único desde 0.27, `VLLM_USE_V1=0` ya no hace nada--
+# reserva sus buffers con Unified Virtual Addressing, y el passthrough de GPU de
+# WSL2 no lo expone. No es configuración y no hay bandera que lo evite: en Windows
+# hay que usar Ollama, que sí funciona sobre la misma tarjeta.
+#
+# En Linux nativo con la misma GPU vLLM arranca, así que esto NO afecta a
+# producción sobre EKS ni a un host on-prem: sólo a la máquina de desarrollo.
+# Por eso el servicio se queda definido, con su perfil, en vez de borrarse.
+# ------------------------------------------------------------------------------
 services:
-  # Ollama NO se apaga con GPU. Un vLLM sirve un modelo, asi que en una maquina con una
-  # sola tarjeta el chat se lleva la GPU y los embeddings los sigue sirviendo Ollama
-  # (bge-m3, 1.2 GB). Apagarlo dejaba a `local/embeddings-dev` sin backend, y el sintoma
-  # no es un error: es un corpus indexado por hashing lexico que parece correcto.
+  # Ollama SE QUEDA, y con la GPU. Dos razones:
   #
-  # Para apagarlo de verdad --porque un segundo vLLM sirve los embeddings-- basta con
-  # no incluir el perfil `serving` de Ollama en el arranque.
+  # 1. Un vLLM sirve un modelo. Aunque vLLM arranque, en una máquina de una sola
+  #    tarjeta el chat se lleva la GPU y los embeddings los sirve Ollama.
+  # 2. En WSL2 es el único que corre en GPU.
+  #
+  # Sin la reserva de abajo, Ollama corre en CPU y parece que la GPU no se usa.
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${OLLAMA_GPU_COUNT:-1}
+              capabilities: [gpu]
+    # El primer arranque con un modelo de 8B tarda en cargar a VRAM.
+    healthcheck:
+      start_period: 120s
 
   vllm:
     restart: unless-stopped
-    profiles: [serving, full]
-    # Pinned by variable, not by literal: the CUDA build has to match the card. Blackwell
-    # (RTX 50xx, sm_120) needs a CUDA 12.9 image; the cu129 tag is the one that has it.
+    # Fuera de `serving` y `full` a propósito: en WSL2 no arranca, y un servicio
+    # que crashea en bucle dentro del perfil por defecto convierte un stack sano
+    # en uno que parece roto. Se pide explícitamente con --profile vllm.
+    profiles: [vllm]
+    # Pinchado por variable, no por literal: la build de CUDA tiene que casar con
+    # la tarjeta. Blackwell (RTX 50xx, sm_120) necesita una imagen con CUDA 12.9;
+    # el tag cu129 es la que la trae.
     image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.28.0}
     command:
-      # Two variables, not one. The weights and the name the gateway asks for are
-      # different things: a quantized checkpoint (Qwen3-8B-FP8) has to answer to the name
-      # litellm.yaml routes to (Qwen3-8B), or every request 404s at the proxy.
+      # Dos variables, no una. Los pesos y el nombre que pide el gateway son cosas
+      # distintas: un checkpoint cuantizado (Qwen3-8B-FP8) tiene que responder al
+      # nombre al que rutea litellm.yaml (Qwen3-8B), o toda petición da 404 en el
+      # proxy.
       - --model=${VLLM_MODEL:-Qwen/Qwen3-8B}
       - --served-model-name=${VLLM_SERVED_NAME:-${VLLM_MODEL:-Qwen/Qwen3-8B}}
       - --host=0.0.0.0
@@ -43,10 +66,14 @@ services:
     environment:
       HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
       VLLM_NO_USAGE_STATS: "1"
-      # Sembrar el volumen no basta. Con la cache llena, vLLM sigue llamando a
-      # huggingface.co para resolver el repo, y en la red `backend` --que es internal--
-      # eso muere en DNS: `httpx.ConnectError: Temporary failure in name resolution`, que
-      # no se parece en nada a "no hay salida a internet, y es a proposito".
+      # Sembrar el volumen no basta. Con la caché llena, vLLM sigue llamando a
+      # huggingface.co para resolver el repo, y en la red `backend` --que es
+      # internal-- eso muere en DNS: `httpx.ConnectError: Temporary failure in name
+      # resolution`, que no se parece en nada a "no hay salida, y es a propósito".
+      #
+      # Sembrar la caché, una vez, desde un contenedor que sí tiene ruta:
+      #   docker run --rm -v <proyecto>_vllm-cache:/root/.cache/huggingface \
+      #     --entrypoint hf ${VLLM_IMAGE} download ${VLLM_MODEL}
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
     volumes:

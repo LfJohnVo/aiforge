@@ -441,6 +441,68 @@ def _metric_tokens(expr: str) -> set[str]:
     return names
 
 
+# ------------------------------------------------------------ production override
+
+
+PROD_OVERRIDE = REPO_ROOT / "deploy" / "compose" / "prod.override.yml"
+
+
+def test_production_publishes_only_the_proxy() -> None:
+    """One port on the host, and it terminates TLS.
+
+    `ports: !override []` and not an omission: Compose merges list fields, so leaving
+    `ports` out of the override would keep the base file's 8080 and the whole thing
+    would be decorative.
+    """
+    override = _compose(PROD_OVERRIDE)
+
+    published = {
+        name: service.get("ports")
+        for name, service in override["services"].items()
+        if service.get("ports")
+    }
+    assert set(published) == {"caddy"}
+    assert override["services"]["agent-api"]["ports"] == []
+    assert override["services"]["grafana"]["ports"] == []
+
+
+def test_production_turns_on_the_mode_that_refuses_a_dev_configuration() -> None:
+    override = _compose(PROD_OVERRIDE)
+
+    for name in ("agent-api", "ingestion-worker"):
+        assert override["services"][name]["environment"]["AGENT_FORGE_ENV"] == "production"
+
+
+def test_the_application_containers_cannot_write_to_their_own_filesystem() -> None:
+    """Not the datastores: those are the ones that are supposed to write."""
+    override = _compose(PROD_OVERRIDE)
+
+    for name in ("agent-api", "ingestion-worker"):
+        assert override["services"][name]["read_only"] is True
+        assert override["services"][name]["tmpfs"], f"{name}: read_only with nowhere to write"
+
+    for name in ("postgres", "redis", "qdrant"):
+        assert "read_only" not in override["services"].get(name, {})
+
+
+def test_the_proxy_config_exists_and_does_not_buffer_the_stream() -> None:
+    """A proxy that buffers turns streaming chat into one late block of text."""
+    caddyfile = (REPO_ROOT / "deploy" / "proxy" / "Caddyfile").read_text(encoding="utf-8")
+
+    assert "flush_interval -1" in caddyfile
+    assert "reverse_proxy agent-api:8080" in caddyfile
+
+
+def test_every_service_the_production_override_names_exists_in_the_base() -> None:
+    """An override for a service the base file does not define is silently inert."""
+    base = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+    override = _compose(PROD_OVERRIDE)
+
+    # caddy is introduced by the override itself; everything else must already exist.
+    unknown = set(override["services"]) - set(base["services"]) - {"caddy"}
+    assert not unknown, unknown
+
+
 # --------------------------------------------------------------------- alert rules
 
 
