@@ -1,6 +1,8 @@
 # Traspaso a otra máquina
 
-> Última medición: 2026-09-07, commit `9305458`, rama `main`, árbol limpio.
+> Última medición: 2026-09-09, rama `main`, árbol limpio. La célula se arrancó, se
+> verificó en vivo y se corrigieron trece defectos de despliegue; las salidas crudas
+> están en `docs/memory/evidence/`.
 > Este documento existe para que la siguiente sesión **no dependa de la memoria de nadie**.
 > Si algo aquí contradice al código, manda el código: corrige este fichero.
 
@@ -16,8 +18,8 @@ revisión.
 
 | | |
 |---|---|
-| Commits | 16 hasta `9305458`, uno por unidad lógica |
-| Tests | 670 unit + policy · 28 de integración · 1 saltado (stdio MCP en win32) |
+| Commits | 26, uno por unidad lógica |
+| Tests | 736 unit + policy · 28 de integración · 1 saltado (stdio MCP en win32) |
 | Cobertura | global 82.4 % · `core` 85.7 % · `governance` 94.8 % · `knowledge` 80.2 % |
 | ADRs | 9 (+ plantilla) |
 | Decisiones | 71 en `docs/memory/DECISIONS_LOG.md`, una entrada por fase |
@@ -29,9 +31,11 @@ Lo que **no** está hecho, y por qué —ninguno es un fallo del código:
 * **Ingesta desde SharePoint**: el adaptador existe y está probado contra su contrato,
   pero verificarlo de verdad necesita credenciales de un tenant real. El propio DoD lo
   reconoce al escribir «(con credenciales)».
-* **Perfil `full` con vLLM**: pide GPU. En CPU se usa `local/dev` o `local/tiny`. La
-  máquina de desarrollo actual **sí** tiene una (RTX 5060 Ti 16 GB, passthrough a
-  Docker verificado): `docs/PRODUCTION_PLAN.md` §1 y §3 dicen cómo usarla.
+* **vLLM bajo Windows**: no arranca, y no es configuración. `RuntimeError: UVA is not
+  available` — el motor V1 usa Unified Virtual Addressing y el passthrough de GPU de WSL2
+  no lo expone. En Linux nativo con la misma tarjeta sí. Aquí la GPU la usa **Ollama**
+  (`local/dev` para chat, `local/embeddings-dev` para embeddings), y funciona: 6.8 GB de
+  VRAM, respuestas con citas en 9–18 s.
 * **Restauración de respaldos**: el procedimiento está en el RUNBOOK; probarlo necesita un
   despliegue con datos.
 
@@ -59,6 +63,9 @@ make check            # ruff + mypy strict + tests unitarios. Debe salir verde
 
 ## 3. Arrancar y consumir
 
+> Lo de abajo se ejecutó entero el 2026-09-09 y funciona. Si algo falla, es del entorno,
+> no del procedimiento.
+
 ```bash
 cp .env.example .env
 ```
@@ -76,6 +83,28 @@ Hay que rellenar **siete** valores; los cinco marcados `change-me` más dos que 
 make up PROFILE=core
 curl -s http://127.0.0.1:8080/health/ready
 ```
+
+`make up` ya pasa `--env-file .env` cuando ese fichero existe. Hace falta: Compose resuelve
+`.env` **junto al fichero compose**, no desde donde corres el comando, así que sin eso el
+`.env` de la raíz no lo lee nadie y el error es «falta LITELLM_MASTER_KEY» sobre una
+variable que está puesta.
+
+Para la PoC completa —con GPU, corpus, OIDC de juguete y Mailpit— hay tres ficheros de
+override y un guion que lo comprueba:
+
+```bash
+uv run python scripts/demo/make_corpus.py      # corpus sintetico, todo inventado
+uv run python scripts/demo/mint_tokens.py      # emisor OIDC local y cuatro usuarios
+docker compose -f deploy/compose/docker-compose.yml \
+               -f deploy/compose/gpu.override.yml \
+               -f deploy/compose/demo.override.yml --env-file .env \
+               --profile core --profile serving --profile knowledge up -d --wait
+docker exec <proyecto>-ingestion-worker-1 python -m agent_forge.knowledge.ingestion --once
+uv run python scripts/demo/verify_live.py      # 7/7
+```
+
+El filtrado por identidad **no se puede demostrar con una API key**: una key identifica al
+tenant, así que `groups` viene vacío y no hay nada que filtrar. De ahí el emisor de juguete.
 
 Para obtener una respuesta de un modelo hacen falta **dos pasos más** que no son obvios;
 están en `docs/RUNBOOK.md` §1.1 y §1.2 y se resumen así:
@@ -105,7 +134,7 @@ Windows, y varias de éstas se descubrieron a base de perderlas:
   antes de recolectar un solo test. Ya está desactivado con `-p no:deepeval` en
   `pyproject.toml`; si aparece algo parecido con otra extra, el patrón es el mismo.
 
-## 5. Cinco bugs de despliegue ya corregidos
+## 5. Bugs de despliegue ya corregidos
 
 No los vuelvas a buscar; están arreglados y con test. Se listan porque explican por qué el
 compose y los perfiles tienen la forma que tienen:
@@ -120,6 +149,21 @@ compose y los perfiles tienen la forma que tienen:
    petición. Ahora está acotado y degrada.
 5. `check_capabilities` avisaba en desarrollo mientras los constructores de Qdrant y Neo4j
    lanzaban igualmente, así que el perfil `core` **no podía arrancar**. Ahora coinciden.
+
+Y ocho más de la noche del 2026-09-09, con el detalle en `docs/PRODUCTION_PLAN.md` §0. Los
+tres que más tiempo cuestan si se vuelven a encontrar a ciegas:
+
+6. **El worker de ingesta nunca arrancó.** Su `CMD` era `python -m
+   agent_forge.knowledge.ingestion` y ese paquete no tenía `__main__`. Ahora existe, con
+   una planificación por fuente leída de `sync_cron`.
+7. **La imagen de la API no podía leer el corpus.** Se construía sin extras, así que caía a
+   un almacén vectorial en memoria —vacío— mientras el worker escribía en Qdrant. Y el
+   arreglo tenía trampa: el segundo `uv sync` de la etapa *desinstala* lo que instaló el
+   primero si no repite los extras.
+8. **La caché semántica cachea los fallos.** Dos verificaciones seguidas dieron 3/7 con el
+   sistema ya arreglado porque servía respuestas «no hay información» de antes, con
+   `similarity=1.0`. Si algo va mal y acabas de arreglarlo, vacía Redis antes de concluir
+   nada.
 
 ## 6. Dos modelos de instancia
 

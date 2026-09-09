@@ -713,3 +713,47 @@ plataforma PEAK se enchufa por configuración cuando exista) y **el destino es A
 ser la huella existente. La máquina de desarrollo tiene GPU (RTX 5060 Ti 16 GB, passthrough
 a Docker verificado), así que la PoC usa el perfil `full` con vLLM y Qwen3-8B-FP8, cosa que
 el HANDOFF descartaba.
+
+### D-073 · La noche de ejecución del plan: trece defectos que sólo aparecen arrancando
+
+**Contexto:** se ejecutaron las rutas A y B de `docs/PRODUCTION_PLAN.md` de una sentada.
+Antes de empezar, un pre-mortem identificó cinco modos de fallo; tres de sus mitigaciones
+se aplicaron por delante (inventario de volúmenes ajenos, evidencia cruda en fichero,
+`gitleaks` como puerta del push) y las otras dos se gestionaron durante la ejecución.
+
+**Lo que se cerró:** B1 (modo producción real), B2 (embeddings y rerank configurables,
+más un reranker por gateway), B3 (límite de tasa por credencial), B5 (release firmado con
+cosign), B6 (override de producción para Compose con Caddy), B7 (once alertas, tres SLOs y
+un contador de degradaciones), B9 (NetworkPolicy, PDB, values-prod). De la ruta A: A0 a A5,
+con la PoC verificada 7/7 en vivo, 28 registros de evidencia verificados y una segunda
+célula levantada en **un** contenedor compartiendo Postgres con la primera.
+
+**Lo que enseñó, y es la parte que importa:** la suite tenía 705 tests verdes y no habría
+encontrado ninguno de los trece defectos, porque todos viven en la frontera entre el código
+y su despliegue. Ocho son de la misma clase —el sistema sigue respondiendo, peor, sin que
+nada falle—: el RAG cayendo a hashing léxico, la imagen de la API leyendo un almacén en
+memoria vacío, el reranker descartando candidatos, el clasificador pisando la clasificación
+declarada, `verify_ledger` reportando éxito en el directorio equivocado. La lección
+operativa quedó como test donde se pudo: ahora hay uno que lee el `Dockerfile` y resuelve
+cada `python -m` que declara, y otro que compara los extras de las dos etapas de cada
+imagen.
+
+**Tres decisiones tomadas por el camino:**
+
+* **vLLM no corre bajo WSL2** (`UVA is not available`, motor V1, sin bandera que lo evite).
+  No afecta a producción sobre Linux. El servicio se movió a su propio perfil `vllm` en vez
+  de borrarse, y Ollama se queda con la GPU.
+* **El extra `knowledge` se partió en `knowledge` (clientes) y `parsing` (docling).** La API
+  recupera en cada petición y necesita los clientes; nunca abre un PDF y no necesita torch.
+  Imagen de la API: 1.12 GB en vez de 10.3. Efecto secundario: la exclusión mutua con
+  `promptguard` sigue a lightrag hacia `parsing`, así que `knowledge` y `promptguard` ya no
+  son incompatibles.
+* **La clasificación que trae un documento es un suelo.** El front matter puede subirla y
+  nunca bajarla, y el clasificador tampoco puede bajarla. Es lo que hace seguro honrar una
+  declaración de un documento que el modelo de amenazas asume potencialmente hostil.
+
+**Dos hallazgos anotados sin tocar:** la caché semántica cachea las respuestas de fallo
+(72 h de TTL por defecto: un fallo de cinco minutos contamina tres días, y fue lo que hizo
+que dos verificaciones dieran 3/7 con el sistema ya arreglado), y con el PDP caído se
+deniega también C0 aunque el RUNBOOK §3.1 diga lo contrario. Los dos van a
+`OPEN_QUESTIONS`.

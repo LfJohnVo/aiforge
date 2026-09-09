@@ -1,71 +1,119 @@
 # Plan de producción y PoC local
 
-> Medido el 2026-09-07 sobre `main` en `9305458`. La misión de `PROMPT_AGENT_FORGE.md`
-> está cerrada (`FORGE_DONE`); esto es **lo que falta** para que una célula sirva usuarios
-> reales, empezando por una PoC en la máquina de desarrollo.
-> Precedencia: código medido > ADR > este plan. Si el código cambia, corrige el plan.
+> Escrito el 2026-09-07, ejecutado la noche del 2026-09-09. La misión de
+> `PROMPT_AGENT_FORGE.md` está cerrada (`FORGE_DONE`); esto es **lo que falta** para que
+> una célula sirva usuarios reales, empezando por una PoC en la máquina de desarrollo.
+>
+> Precedencia: código medido > ADR > este plan. Si el código cambia, corrige el plan. Y
+> lo que dice «medido» lleva su salida cruda en `docs/memory/evidence/`: sin eso, no está
+> medido.
 
-## 0. Estado medido hoy
+## 0. Estado medido
 
-| Qué | Resultado | Cómo se midió |
+> Sesión del 2026-09-09, de noche. Todo lo de abajo se ejecutó; las salidas crudas están
+> en `docs/memory/evidence/`.
+
+| Qué | Resultado |
+|---|---|
+| Gate `make check` | **verde**: ruff, mypy strict, 736 passed · 1 skipped |
+| Tests de política (OPA real) | 46, ejecutándose (antes se saltaban por falta de Docker) |
+| Definition of Done | 15/15 con evidencia; los puntos 2 y 7 pasan de test a **medido en vivo** |
+| Célula en vivo | responde con citas, filtra por identidad, deniega C3 a quien no toca |
+| Cadena de evidencia | **28 registros verificados** en la célula desplegada |
+| Segunda área | **un contenedor**, compartiendo Postgres con la primera |
+| Rutas cerradas | B1, B2, B3, B5, B6, B7, B9 · A0, A1 (con salvedad), A2, A3, A4, A5 |
+
+### La PoC, verificada
+
+`scripts/demo/verify_live.py`, **7/7**:
+
+| Comprobación | Resultado |
+|---|---|
+| Respuesta con cita a quien tiene el grupo | 1,500 MXN + `politica-viaticos.md#p0`, 8.8 s |
+| El mismo dato preguntado con otras palabras | encontrado, 17.7 s — los embeddings son semánticos |
+| Un usuario de otra área no obtiene el dato | nada |
+| No se filtra ningún dato del documento reservado | ni cifras ni confirmación de que exista |
+| Quien sí tiene el grupo obtiene el C3 | 6.2x + `plan-adquisicion.md#p0`, 15.6 s, modelo local |
+| Sin grupos, indistinguible de corpus vacío | nada |
+| Sin credencial | 401 |
+
+Y además, a mano: con OPA parado la célula **deniega y explica** el motivo, y al volver OPA
+responde sin reiniciar nada.
+
+### Trece hallazgos, todos por arrancar el sistema
+
+Ninguno lo habría encontrado la suite de tests, y ocho son de la clase peor: el sistema
+sigue respondiendo, peor, sin que nada falle.
+
+| # | Hallazgo | Estado |
 |---|---|---|
-| Gate `make check` | **verde**: ruff, mypy strict, 670 passed · 1 skipped (70 s) | `make check`, 2026-09-07 01:44, tras `9305458` |
-| Definition of Done (sección 12) | 15/15 con evidencia localizada | `verify_dod.py` sobre el árbol |
-| Documentación exigida | 27 documentos con contenido real | `scripts/docs_check.py` |
-| Cobertura | global 82.4 % (`coverage.xml` de F8) | `make cov` |
-| Rama / commits | `main`, 16 commits, árbol limpio | `git status`, `git log` |
-| Verificado en vivo (F8, 2026-09-02) | perfil `core` sano; respuesta real en streaming con `local/tiny`; tres células a la vez; métricas y ledger con datos; SBOM 381 componentes; trivy CRITICAL = 0 | nota de sesión F8, D-071 |
+| 1 | `make check` estaba **rojo** en `c8275ba` (formato) | corregido `9305458` |
+| 2 | `DEPLOYMENT.md` §6 prometía un modo producción que el código no aplicaba | B1 |
+| 3 | `EMBEDDING_MODEL`, `RERANK_MODEL`, `GOVERNANCE_FAIL_MODE`, `DEV_SHARED_SECRET`: cuatro variables muertas | B1 · B2 |
+| 4 | `local/embeddings` sin backend en ningún perfil; el RAG caía a hashing léxico **en silencio** | B2 |
+| 5 | `LexicalReranker` **descartaba** candidatos en vez de ordenarlos | B2 |
+| 6 | El **worker de ingesta nunca pudo arrancar**: `python -m` sobre un paquete sin `__main__` | corregido |
+| 7 | `make up` no leía el `.env` de la raíz: Compose lo busca junto al fichero compose | corregido |
+| 8 | `LOCAL_CORPUS_PATH` significaba dos cosas; el valor del ejemplo rompía el montaje | corregido |
+| 9 | La **imagen de la API no podía leer el corpus**: sin extras, almacén en memoria vacío | corregido |
+| 10 | El segundo `uv sync` **desinstalaba** lo que ponía el primero | corregido |
+| 11 | El **override manual de clasificación no existía**, y el modelo de amenazas se apoya en él | implementado |
+| 12 | El clasificador **pisaba** la clasificación declarada, incluso a la baja | corregido |
+| 13 | `verify_ledger` ignoraba `LEDGER_PATH`: reportaba éxito mirando donde no era | corregido |
 
-**Nunca verificado en vivo** —y la PoC existe para hacerlo—: RAG con un embedder real y
-respuesta con citas; vLLM en GPU; HITL fuera de los tests; restauración de respaldos;
-ingesta desde SharePoint (necesita tenant).
+Dos más, anotados sin tocar el código, porque cambiarlos de madrugada sin entenderlos del
+todo sería peor que dejarlos escritos:
 
-### Hallazgos de hoy que el plan absorbe
+* **La caché semántica cachea los fallos.** Una respuesta «no hay información» producida
+  por una recuperación rota se sirvió durante las horas siguientes con `similarity=1.0`.
+  Con el TTL por defecto de 72 h, un fallo transitorio de 5 minutos contamina tres días.
+  Esto fue lo que hizo que dos verificaciones seguidas dieran 3/7 con el sistema ya
+  arreglado.
+* **Con el PDP caído se deniega también C0.** El RUNBOOK §3.1 dice que C0/C1 sigue
+  funcionando. Medido: no. Es el lado seguro del error, pero la documentación y el código
+  no dicen lo mismo.
 
-1. **El gate estaba rojo en `c8275ba`.** `ruff format --check` rechazaba una línea de
-   `tests/unit/test_packaging.py`. Corregido en `9305458`. Lección: el cierre de F8 corrió
-   pytest, no `make check` completo.
-2. **`DEPLOYMENT.md` §6 promete más de lo que hay.** Dice que `AGENT_FORGE_ENV=production`
-   «exige OIDC y rechaza `permissive_c0c1`». El código sólo apaga `/docs` y
-   `/openapi.json` (`api/app.py:57`) y activa `strict` en `check_capabilities`
-   (`runtime.py:356`). Es documentación aspiracional, que la sección 14 del prompt prohíbe.
-   → B1.
-3. **`EMBEDDING_MODEL` y `RERANK_MODEL` no las lee nadie.** Están en `.env.example`
-   (líneas 76–77) y en ningún `.py`. → B2.
-4. **El alias `local/embeddings` no tiene backend en ningún perfil.** Apunta a
-   `hosted_vllm/BAAI/bge-m3` en `VLLM_BASE_URL`, pero el único vLLM del stack sirve Qwen y
-   un vLLM sirve un modelo. `safe_embed` degrada a `HashingEmbeddings` (similitud léxica)
-   y lo deja en el log como `embeddings.hashing_selected`, así que el RAG «funciona» sin
-   que nadie note que no es semántico. → A0.3 y B2.
-5. **El reranker es léxico.** `LexicalReranker` (`retriever.py:269`, cobertura de
-   términos) es la única implementación del `Protocol`. Vale para la PoC; producción
-   necesita un cross-encoder. → B2.
-6. **Sin límite de tasa en la API.** Sólo presupuestos por tenant en LiteLLM. → B3.
-7. **Sin pipeline de release.** CI construye la imagen para escanearla y la descarta; nada
-   publica, firma ni adjunta el SBOM. La skill `release` termina en el tag. → B5.
-8. **Sin alertas.** Cinco dashboards, cero reglas de Prometheus. → B7.
-9. **Helm sin `NetworkPolicy`** y con `ingress.tls: []`. → B9.
-10. **`gpu.override.yml` fija `vllm/vllm-openai:v0.28.0`** —no está en caché; son ~37 GB—
-    y usa la misma variable para la ruta del modelo y el nombre servido, lo que impide
-    servir pesos FP8 bajo el nombre que `litellm.yaml` espera. → A0.2.
+### Lo que no está hecho
+
+* **B4** (ADR-010 de modelos) espera a los números de A7, que no se ejecutó.
+* **B8** (respaldos automáticos) y **B10** (corpus hostil): no empezados.
+* **A6** (simulacro de restauración) y **A7** (prueba de carga): no ejecutados.
+* **Ruta C** entera: necesita credenciales de nube y las siete decisiones de §7.
+* **Ruta D**: necesita usuarios reales.
 
 ## 1. Esta máquina (medido)
 
 | | |
 |---|---|
 | CPU / RAM | Ryzen 9 5900XT 16c/32t · 32 GB |
-| GPU | **RTX 5060 Ti 16 GB** (Blackwell), driver 610.62 · passthrough a Docker **funciona** (`nvidia-smi` dentro de un contenedor) |
-| Docker Desktop | 32 CPUs · **15.6 GB** de RAM (sin `.wslconfig` → 50 % del host) |
+| GPU | **RTX 5060 Ti 16 GB** (Blackwell), driver 610.62 · passthrough a Docker **funciona**, y Ollama la usa: 6.8 GB de VRAM y 37 % de uso con qwen3:8b cargado |
+| Docker Desktop | 32 CPUs · **24 GB** tras poner `.wslconfig` (antes 15.6, el 50 % por defecto) |
 | Disco E: | 571 GB libres |
 | Imágenes ya en caché | todas las del stack, `agent-forge/api:0.1.0`, `vllm/vllm-openai:v0.27.1-cu129` (37.5 GB), `ollama/ollama:0.33.2`, `nvidia/cuda:12.8.0-base`, `axllent/mailpit` |
-| Sobras de la demo | 12 contenedores `Exited` y sus volúmenes (`demo_*`, `demo-ventas_*`) |
-| `.env` | **no existe** |
+| Sobras de la demo | limpiadas |
+| `.env` | creado, con contraseñas aleatorias, ignorado por git |
 
-Consecuencias. El perfil `full` con vLLM **sí** es viable aquí, cosa que el HANDOFF
-descartaba por falta de GPU. Qwen3-8B en fp16 no cabe (16 GB sólo de pesos);
-**Qwen3-8B-FP8** (~8.5 GB) sí, con KV cache para 16k de contexto. Qwen3-32B no cabe en
-ningún formato: `local/quality` se prueba en producción, no aquí. El cuello es la RAM del
-VM (15.6 GB), no la GPU: hay que subirla a 24 GB.
+**vLLM no arranca en esta máquina, y no es configuración.** Medido:
+
+```
+RuntimeError: UVA is not available
+```
+
+El motor V1 de vLLM —el único desde 0.27; `VLLM_USE_V1=0` ya no hace nada— reserva sus
+buffers con Unified Virtual Addressing, y el passthrough de GPU de WSL2 no lo expone. No
+hay bandera que lo evite. En **Linux nativo con la misma tarjeta sí arranca**, así que esto
+no afecta a producción sobre EKS ni a un host on-prem: sólo a la máquina de desarrollo.
+
+Así que en Windows el chat lo sirve **Ollama sobre la misma GPU** (`local/dev`, qwen3:8b),
+y los embeddings también (`local/embeddings-dev`, bge-m3, 1024 dimensiones). Dos líneas del
+perfil vuelven a `local/fast` en Linux.
+
+Latencias medidas con esa configuración, sin caché: **8.8 s a 17.7 s** por respuesta
+completa con recuperación y citas. Es una sola tarjeta sirviendo chat y embeddings a la
+vez; sirve para demostrar, no para dimensionar.
+
+La RAM del VM subió de 15.6 GB a 24 GB (`.wslconfig`), y con el stack entero más la
+segunda célula el consumo se quedó en **7 GB**: no era el cuello.
 
 ## 2. Qué es «producción v1»
 
@@ -96,7 +144,9 @@ processors=16
 
 y `wsl --shutdown`; Docker Desktop se reinicia solo.
 
-**A0.2 `deploy/compose/gpu.override.yml`** (dos líneas, con test en `test_packaging.py`):
+**A0.2 `deploy/compose/gpu.override.yml`.** *Ejecutado, y el resultado cambió el plan:
+vLLM no arranca bajo WSL2 (§1). El override quedó parametrizado igual —sirve tal cual en
+Linux— y además da la GPU a Ollama, que es lo que acabó sirviendo el chat aquí.*
 
 * `image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.28.0}` → en `.env`,
   `VLLM_IMAGE=vllm/vllm-openai:v0.27.1-cu129` (ya en caché; CUDA 12.9 soporta Blackwell).
