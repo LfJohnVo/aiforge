@@ -77,16 +77,37 @@ upstream:
 # Conocimiento
 # ------------------------------------------------------------------------------
 knowledge:
+  # Solo carpeta local: SharePoint necesita credenciales de un tenant real, y una fuente
+  # que no puede autenticarse llena el log de errores que tapan a los de verdad.
+  #
+  # Una fuente por area, y no una sola con todo dentro, porque **la carpeta es la
+  # frontera de acceso**: `default_acl_groups` es por fuente, asi que separar las
+  # carpetas es como se declara quien ve que. No hace falta ninguna linea de codigo
+  # para esto; hace falta configurarlo bien.
+  #
+  # La clasificacion si va por documento, en el front matter, y solo puede SUBIR sobre
+  # el default del perfil (`effective_classification`).
   sources:
-    # Solo carpeta local: SharePoint necesita credenciales de un tenant real, y una
-    # fuente que no puede autenticarse llena el log de errores que tapan a los de verdad.
     - type: folder
-      path: "/data/corpus"
+      path: "/data/corpus/finanzas"
       sync_cron: "0 * * * *"
-      # Grupos que heredan los documentos que no declaran ACL propia. El corpus de la
-      # PoC si la declara en su front matter, asi que esto es solo la red de seguridad,
-      # y es deliberadamente el grupo mas restringido: equivocarse hacia abajo expone.
+      default_acl_groups: ["finanzas"]
+    - type: folder
+      path: "/data/corpus/rrhh"
+      sync_cron: "0 * * * *"
+      default_acl_groups: ["rrhh"]
+    - type: folder
+      path: "/data/corpus/ventas"
+      sync_cron: "0 * * * *"
+      default_acl_groups: ["ventas"]
+    - type: folder
+      path: "/data/corpus/direccion"
+      sync_cron: "0 * * * *"
       default_acl_groups: ["direccion"]
+    - type: folder
+      path: "/data/corpus/ti"
+      sync_cron: "0 * * * *"
+      default_acl_groups: ["todos"]
   rag:
     enabled: true
     top_k: 8

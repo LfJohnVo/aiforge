@@ -14,11 +14,14 @@ their sensitivity label. Two rules:
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
+
+import yaml
 
 from agent_forge.core.classification import Classification
 from agent_forge.core.errors import AgentForgeError
@@ -29,12 +32,15 @@ log = get_logger(__name__)
 
 __all__ = [
     "FolderSourceReader",
+    "FrontMatter",
     "S3SourceReader",
     "SharePointSourceReader",
     "SourceError",
     "SourceReader",
     "SyncCursor",
     "build_reader",
+    "effective_classification",
+    "parse_front_matter",
     "parse_text",
 ]
 
@@ -175,24 +181,114 @@ class FolderSourceReader:
 
             relative = path.relative_to(self._root).as_posix()
             source = SourceRef(kind=self.kind, locator=f"{self._root.as_posix()}/{relative}")
+            # Hash the file as written, header included: a change to the declared
+            # classification has to count as a change, or the re-sync skips it.
             content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
             if cursor.unchanged(source.source_id, content_hash):
                 continue
             cursor.record(source.source_id, content_hash)
 
+            declared = parse_front_matter(text, source_id=source.source_id)
             yield Document(
                 source=source,
                 tenant_id=self._tenant_id,
-                title=path.stem.replace("_", " ").replace("-", " "),
-                text=text,
+                title=declared.title or path.stem.replace("_", " ").replace("-", " "),
+                text=declared.body,
                 acl=self._acl,
-                classification=self._default,
+                classification=effective_classification(
+                    declared.classification, self._default, source_id=source.source_id
+                ),
                 updated_at=datetime.fromtimestamp(path.stat().st_mtime, tz=UTC),
                 metadata={"path": relative, "suffix": path.suffix.lower()},
             )
 
     async def health(self) -> bool:
         return self._root.is_dir()
+
+
+# ------------------------------------------------------------------ front matter
+
+# `---` ... `---` at the very top of a text document. Markdown corpora carry it as a
+# matter of course, and it is the only place a *document author* can say something the
+# pipeline should obey.
+_FRONT_MATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.S)
+
+
+@dataclass(frozen=True, slots=True)
+class FrontMatter:
+    """What a document declares about itself. Everything is optional."""
+
+    classification: Classification | None = None
+    title: str = ""
+    body: str = ""
+
+
+def parse_front_matter(text: str, *, source_id: str = "") -> FrontMatter:
+    """Read the document's own declaration, and strip it from the indexed text.
+
+    `docs/KNOWLEDGE.md` has promised a **manual override** of classification since F3 and
+    `THREAT_MODEL.md` lists it as the compensating control for the classifier getting it
+    wrong. Until now no such mechanism existed: every document in a source inherited one
+    classification from the profile.
+
+    Stripping matters as much as parsing. Left in, the YAML block becomes part of the
+    first chunk, so a search for "classification" matches every document in the corpus and
+    the header competes with the prose for the citation.
+    """
+    match = _FRONT_MATTER.match(text)
+    if match is None:
+        return FrontMatter(body=text)
+
+    body = text[match.end() :]
+    try:
+        parsed = yaml.safe_load(match.group(1))
+    except yaml.YAMLError as exc:
+        # A malformed header is not a reason to skip a document, but it is a reason to
+        # say so: the author believed they were declaring something.
+        log.warning("ingestion.front_matter_invalid", source=source_id, detail=str(exc))
+        return FrontMatter(body=body)
+
+    if not isinstance(parsed, dict):
+        return FrontMatter(body=body)
+
+    declared: Classification | None = None
+    raw = parsed.get("classification")
+    if raw is not None:
+        try:
+            declared = Classification.parse(raw)
+        except ValueError:
+            log.warning("ingestion.front_matter_unknown_class", source=source_id, got=str(raw))
+
+    title = parsed.get("title")
+    return FrontMatter(
+        classification=declared,
+        title=str(title) if isinstance(title, str | int | float) else "",
+        body=body,
+    )
+
+
+def effective_classification(
+    declared: Classification | None, default: Classification, *, source_id: str = ""
+) -> Classification:
+    """The document's declaration may only **raise** the classification, never lower it.
+
+    This is the asymmetry that makes the override safe to honour. THREAT_MODEL assumption
+    4 is that an ingested document may be hostile even from a corporate source; if front
+    matter could lower classification, anyone able to drop a file into the corpus could
+    declassify it by typing `classification: C0`. Raising is a different act: the worst a
+    hostile document achieves is making itself *less* reachable.
+    """
+    if declared is None or declared <= default:
+        if declared is not None and declared < default:
+            log.info(
+                "ingestion.front_matter_ignored",
+                source=source_id,
+                declared=str(declared),
+                applied=str(default),
+                detail="a document may raise its classification, never lower it",
+            )
+        return default
+    return declared
 
 
 # ---------------------------------------------------------------- sharepoint

@@ -118,13 +118,22 @@ class IngestionPipeline:
     async def ingest_document(self, document: Document) -> list[Chunk]:
         """Classify, chunk, embed and index one document."""
         verdict = await self._classifier.classify(document)
-        document.classification = verdict.classification
+        # The classification the document arrives with is a **floor**, not a suggestion:
+        # it is either the source default an operator configured or a level the document
+        # declared for itself, and the classifier may raise it but never lower it. Before
+        # this, the verdict overwrote both -- so a document declaring C3 inside a C2
+        # source was silently indexed as C2, and the manual override that THREAT_MODEL
+        # leans on did nothing at all.
+        applied = max(verdict.classification, document.classification)
         log.debug(
             "ingestion.classified",
             source_id=document.source_id,
-            classification=str(verdict.classification),
+            classification=str(applied),
+            proposed=str(verdict.classification),
+            floor=str(document.classification),
             method=verdict.method,
         )
+        document.classification = applied
 
         chunks = build_chunks(document, max_chars=self._chunk_chars, overlap=self._overlap)
         if not chunks:
