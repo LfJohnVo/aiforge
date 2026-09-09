@@ -82,6 +82,20 @@ class Document:
     updated_at: datetime = field(default_factory=_now)
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        """Normalise a classification that arrived as a string.
+
+        The field is typed `Classification`, and anything built from JSON -- an eval
+        corpus, a payload -- hands it `"C2"` instead. That does not fail loudly: `"C2" ==
+        Classification.C2` is simply False, so the document compares wrong everywhere
+        until something tries to order it and raises. mypy calls the branch unreachable
+        because from the annotation it is; the guard exists for the callers the annotation
+        does not reach.
+        """
+        current: object = self.classification
+        if not isinstance(current, Classification):
+            self.classification = Classification.parse(current)  # type: ignore[arg-type]
+
     @property
     def source_id(self) -> str:
         return self.source.source_id

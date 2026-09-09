@@ -399,6 +399,13 @@ class Harness:
                 # harness, not a pass.
                 report.breaches.append(f"{name}: no metric was produced for this threshold")
                 continue
+            if summary.cases == 0:
+                # A rate over zero cases is 0.0, and every security gate here is
+                # `max: 0.0`, so an absent dataset passed all three of them silently.
+                # A gate with nothing to grade has not held; it has not run.
+                message = f"{name}: no cases in dataset {gate.dataset!r}; the gate did not run"
+                (report.breaches if gate.blocking else report.warnings).append(message)
+                continue
             if gate.holds(summary.value):
                 continue
             message = (
