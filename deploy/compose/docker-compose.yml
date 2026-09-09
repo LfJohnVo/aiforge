@@ -57,6 +57,13 @@ x-agent-env: &agent-env
   MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
   LEDGER_PATH: ${LEDGER_PATH:-/var/lib/agent-forge/ledger}
   AGENT_API_CORS_ORIGINS: ${AGENT_API_CORS_ORIGINS:-}
+  # Que alias sirve embeddings y rerank. Sin reenviarlos, el contenedor usa el default
+  # y la variable del `.env` no hace nada: el sintoma es un corpus indexado por
+  # coincidencia lexica que parece funcionar.
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-local/embeddings}
+  RERANK_MODEL: ${RERANK_MODEL:-}
+  RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}
+  GOVERNANCE_ACK_PERMISSIVE: ${GOVERNANCE_ACK_PERMISSIVE:-}
   OIDC_ISSUER: ${OIDC_ISSUER:-}
   OIDC_AUDIENCE: ${OIDC_AUDIENCE:-agent-forge}
   OIDC_JWKS_URL: ${OIDC_JWKS_URL:-}

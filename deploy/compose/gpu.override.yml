@@ -4,17 +4,37 @@
 #                  -f deploy/compose/gpu.override.yml --profile serving up -d
 #
 # Requires the NVIDIA container toolkit on the host.
+#
+# vLLM runs on `backend`, which is `internal: true`: no route off the host. That is
+# deliberate -- a store holding tenant data must not have egress -- and it means vLLM
+# CANNOT download its weights. Seed the cache once from a container that does have a
+# route, exactly as RUNBOOK §1.1 does for Ollama:
+#
+#   docker run --rm -v <proyecto>_vllm-cache:/root/.cache/huggingface #     --entrypoint hf ${VLLM_IMAGE} download ${VLLM_MODEL}
+#
+# Without it the container starts, fails to resolve huggingface.co and looks like a
+# broken GPU setup.
 services:
-  ollama:
-    profiles: !override ["never"]   # compose appends list fields; !override replaces
+  # Ollama NO se apaga con GPU. Un vLLM sirve un modelo, asi que en una maquina con una
+  # sola tarjeta el chat se lleva la GPU y los embeddings los sigue sirviendo Ollama
+  # (bge-m3, 1.2 GB). Apagarlo dejaba a `local/embeddings-dev` sin backend, y el sintoma
+  # no es un error: es un corpus indexado por hashing lexico que parece correcto.
+  #
+  # Para apagarlo de verdad --porque un segundo vLLM sirve los embeddings-- basta con
+  # no incluir el perfil `serving` de Ollama en el arranque.
 
   vllm:
     restart: unless-stopped
     profiles: [serving, full]
-    image: vllm/vllm-openai:v0.28.0
+    # Pinned by variable, not by literal: the CUDA build has to match the card. Blackwell
+    # (RTX 50xx, sm_120) needs a CUDA 12.9 image; the cu129 tag is the one that has it.
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.28.0}
     command:
+      # Two variables, not one. The weights and the name the gateway asks for are
+      # different things: a quantized checkpoint (Qwen3-8B-FP8) has to answer to the name
+      # litellm.yaml routes to (Qwen3-8B), or every request 404s at the proxy.
       - --model=${VLLM_MODEL:-Qwen/Qwen3-8B}
-      - --served-model-name=${VLLM_MODEL:-Qwen/Qwen3-8B}
+      - --served-model-name=${VLLM_SERVED_NAME:-${VLLM_MODEL:-Qwen/Qwen3-8B}}
       - --host=0.0.0.0
       - --port=8000
       - --enable-prefix-caching
@@ -23,6 +43,12 @@ services:
     environment:
       HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
       VLLM_NO_USAGE_STATS: "1"
+      # Sembrar el volumen no basta. Con la cache llena, vLLM sigue llamando a
+      # huggingface.co para resolver el repo, y en la red `backend` --que es internal--
+      # eso muere en DNS: `httpx.ConnectError: Temporary failure in name resolution`, que
+      # no se parece en nada a "no hay salida a internet, y es a proposito".
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
     volumes:
       - vllm-cache:/root/.cache/huggingface
     networks: [backend]

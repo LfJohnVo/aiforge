@@ -7,7 +7,12 @@ UV ?= uv
 RUN := $(UV) run
 COMPOSE_FILE := deploy/compose/docker-compose.yml
 PROFILE ?= core
-COMPOSE := docker compose -f $(COMPOSE_FILE) --profile $(PROFILE)
+# Compose resuelve `.env` junto al fichero compose (deploy/compose/), no en el
+# directorio desde el que corres el comando. Sin esto, el `.env` de la raiz --que es
+# donde `.env.example` y el HANDOFF dicen crearlo-- no lo lee nadie y `make up` falla
+# pidiendo una variable que si esta puesta.
+ENV_FILE := $(if $(wildcard .env),--env-file .env,)
+COMPOSE := docker compose -f $(COMPOSE_FILE) $(ENV_FILE) --profile $(PROFILE)
 
 .PHONY: help install check lint fmt type test test-unit test-integration test-policies cov \
         up down logs ps restart evals evals-ci ingest repo-graph verify-ledger \
