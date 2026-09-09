@@ -58,10 +58,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Vector store, graph store and document parsing. Pulls torch transitively via docling.
+# Clients for the stores retrieval reads. Needed by the API *and* the worker: the API
+# retrieves on every request, and without this it falls back to an in-memory store that
+# the worker never writes to -- two processes disagreeing about where the corpus lives.
 knowledge = [
   "qdrant-client==1.19.0",
   "neo4j==6.3.0",
+]
+# Document parsing, for the ingestion side only. Split out of `knowledge` because docling
+# pulls torch: roughly 9 GB that the API image was never going to use, on every node, on
+# every rollout.
+parsing = [
   "docling==2.124.0",
   "lightrag-hku==1.5.6",
 ]
@@ -154,7 +161,10 @@ package = true
 # GraphRAG/PII stacks. Declared as a conflicting extra so the universal lock stays
 # solvable while each install target remains reproducible. See ADR-006.
 conflicts = [
-  [{ extra = "knowledge" }, { extra = "promptguard" }],
+  # The pin that forces this is lightrag-hku's, so the conflict follows it into
+  # `parsing`. Consequence worth noting: `knowledge` and `promptguard` are no longer
+  # mutually exclusive, so an API pod can run the ML prompt firewall and still retrieve.
+  [{ extra = "parsing" }, { extra = "promptguard" }],
   [{ extra = "guardrails" }, { extra = "promptguard" }],
 ]
 

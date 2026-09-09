@@ -1,0 +1,53 @@
+# Añadidos que sólo existen para la demostración local. Nunca en producción.
+#
+#   docker compose -f deploy/compose/docker-compose.yml \
+#                  -f deploy/compose/gpu.override.yml \
+#                  -f deploy/compose/demo.override.yml --env-file .env \
+#                  --profile core --profile serving --profile knowledge up -d
+#
+# Dos piezas, y las dos existen porque la célula hace bien su trabajo:
+#
+# * `oidc-mock` sirve un JWKS estático. Hace falta porque una API key identifica al
+#   *tenant*, no a la persona, así que con una API key `groups` viene vacío y no hay nada
+#   que filtrar (invariante 4). Sin tokens de verdad, el filtrado por identidad no se
+#   puede enseñar.
+# * `mailpit` recibe el correo que aprueba el flujo HITL, para que la acción A2 termine en
+#   algo que se ve en pantalla y no en un log.
+services:
+  oidc-mock:
+    image: nginx:stable-alpine
+    profiles: [core, full]
+    volumes:
+      - ../../data/demo-oidc:/usr/share/nginx/html:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/jwks.json >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: {cpus: "0.2", memory: 64M}
+
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: [core, full]
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      # Sólo la interfaz web, y sólo en loopback: es donde se ve el correo aprobado.
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+    networks: [backend, frontend]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8025/readyz >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: {cpus: "0.3", memory: 128M}
+
+  agent-api:
+    depends_on:
+      oidc-mock: {condition: service_healthy}

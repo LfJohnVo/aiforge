@@ -35,15 +35,21 @@ FROM base AS deps-api
 COPY pyproject.toml uv.lock README.md ./
 # --frozen: the lockfile is the contract. A build that silently resolves different
 # versions than CI tested is not reproducible.
+#
+# The API retrieves on every request, so it needs the store clients. Built without them
+# it fell back to an in-memory vector store -- empty, because the worker writes to Qdrant
+# -- and every question came back "no documented information" with only a warning in the
+# log. It does NOT get `parsing`: it never opens a PDF, and docling brings torch.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev \
+        --extra knowledge --extra memory --extra databases
 
 # --------------------------------------------------------------- deps-worker
 FROM base AS deps-worker
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev \
-        --extra knowledge --extra memory --extra sources --extra databases
+        --extra knowledge --extra parsing --extra memory --extra sources --extra databases
 
 # ------------------------------------------------------------------ runtime
 FROM base AS runtime

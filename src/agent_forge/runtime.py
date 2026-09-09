@@ -62,6 +62,7 @@ log = get_logger(__name__)
 # Optional extras (ADR-005) mapped to an import that proves they are installed.
 CAPABILITY_PROBES: dict[str, str] = {
     "knowledge": "qdrant_client",
+    "parsing": "docling",
     "memory": "mem0",
     "guardrails": "presidio_analyzer",
     "promptguard": "llm_guard",
