@@ -441,6 +441,24 @@ def _metric_tokens(expr: str) -> set[str]:
     return names
 
 
+# ---------------------------------------------------------------- .env.example
+
+
+def test_the_env_example_has_no_inline_comments() -> None:
+    """`docker compose` strips them; `docker run --env-file` does not.
+
+    An inline comment survives into the value, so AGENT_FORGE_INSTANCE arrived as
+    "default               # sufijo unico..." and that string reached Prometheus labels
+    and the ledger's per-instance namespace. Comments go on their own line.
+    """
+    import re
+
+    example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    offenders = [line for line in example.splitlines() if re.match(r"^[A-Z_0-9]+=.*[^ ]\s+#", line)]
+
+    assert not offenders, offenders
+
+
 # ------------------------------------------------------------------ images
 
 
