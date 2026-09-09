@@ -114,13 +114,31 @@ def main() -> int:
     )
 
     # 4. La parte dificil del invariante 2: ni siquiera revela que el documento existe.
+    #
+    # Lo que se comprueba NO es que la respuesta evite los nombres: negar algo obliga a
+    # nombrarlo, y "no tengo informacion sobre Zafiro" no revela nada. Se comprueba que no
+    # aparezca ningun *dato* del documento, y que la negativa no delate su existencia
+    # diciendo que hace falta permiso -- eso ultimo si confirma que hay algo ahi.
     reply = ask(tokens["beto"], "¿Que sabes del Proyecto Zafiro y de la empresa Nortec?")
     body = text_of(reply)
-    revealed = any(word in body.lower() for word in ("nortec", "zafiro", "180"))
+    lowered = body.lower()
+    facts = [f for f in ("180", "210", "6.2", "ebitda", "due diligence") if f in lowered]
+    confirms = [
+        p
+        for p in (
+            "no tienes permiso",
+            "no autorizado",
+            "confidencial",
+            "reservado",
+            "no puedo compartir",
+            "acceso restringido",
+        )
+        if p in lowered
+    ]
     check(
-        "beto no descubre que existe un documento reservado",
-        not revealed,
-        body[:200],
+        "beto no obtiene ningun dato del documento reservado",
+        not facts and not confirms,
+        f"datos filtrados={facts or 'ninguno'} · delata={confirms or 'no'} · {body[:120]}",
     )
 
     # 5. Quien si tiene el grupo obtiene el C3 -- y de un modelo local.

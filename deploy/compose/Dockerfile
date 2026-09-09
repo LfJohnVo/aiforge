@@ -67,7 +67,12 @@ COPY --chown=forge:forge src ./src
 COPY --chown=forge:forge configs ./configs
 COPY --chown=forge:forge scripts ./scripts
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable
+# Los mismos extras que deps-api, y no por prolijidad: `uv sync` sincroniza el
+# entorno a exactamente lo que se le pide, asi que un segundo sync sin ellos
+# DESINSTALA lo que puso el primero. Asi fue como la imagen de la API acabo sin
+# qdrant-client mientras el log de build lo mostraba instalandose.
+    uv sync --frozen --no-dev --no-editable \
+        --extra knowledge --extra memory --extra databases
 
 USER forge
 EXPOSE 8080
@@ -87,7 +92,7 @@ COPY --chown=forge:forge configs ./configs
 COPY --chown=forge:forge scripts ./scripts
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable \
-        --extra knowledge --extra memory --extra sources --extra databases
+        --extra knowledge --extra parsing --extra memory --extra sources --extra databases
 
 USER forge
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

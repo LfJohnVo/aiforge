@@ -11,6 +11,7 @@ rather than handed over as if it were sound.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -20,7 +21,9 @@ from agent_forge.events.evidence import ChainError, EvidenceLedger, JsonlSink, v
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--path", default="./var/ledger", help="ledger root directory (default: ./var/ledger)"
+        "--path",
+        default=os.environ.get("LEDGER_PATH", "./var/ledger"),
+        help="ledger root directory (default: $LEDGER_PATH, else ./var/ledger)",
     )
     parser.add_argument("--tenant", default="", help="verify or export a single tenant")
     parser.add_argument(
@@ -34,7 +37,15 @@ def main(argv: list[str] | None = None) -> int:
     if not root.exists():
         # An absent ledger is not a broken one: a cell that has answered nothing yet has
         # nothing to verify. Say so and succeed.
-        print(f"no ledger at {root}: nothing to verify")
+        #
+        # But say *where* it looked. Run inside a deployed container this printed
+        # "nothing to verify" and exited 0 while a healthy chain sat in $LEDGER_PATH,
+        # because the default ignored that variable -- an integrity check reporting
+        # success for looking in the wrong place. The path is fixed above; naming it here
+        # is what makes the next such drift visible. A cell that *is* serving traffic and
+        # has no chain is caught by the AgentForgeLedgerSinEscrituras alert, which
+        # compares the two rates rather than trusting this exit code.
+        print(f"no ledger at {root}: nothing to verify", file=sys.stderr)
         return 0
 
     try:

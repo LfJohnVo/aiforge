@@ -441,6 +441,64 @@ def _metric_tokens(expr: str) -> set[str]:
     return names
 
 
+# ------------------------------------------------------------------ images
+
+
+def _sync_extras() -> dict[str, list[set[str]]]:
+    """The extras each `uv sync` in the Dockerfile asks for, grouped by stage."""
+    import re
+
+    text = DOCKERFILE.read_text(encoding="utf-8")
+    stages: dict[str, list[set[str]]] = {}
+    current = ""
+    for block in text.splitlines():
+        # Comments mention `uv sync` too, and counting one as an invocation shifts every
+        # stage's list by an empty entry.
+        if block.strip().startswith("#"):
+            continue
+        stage = re.match(r"FROM .* AS ([a-z-]+)", block.strip())
+        if stage:
+            current = stage.group(1)
+            stages.setdefault(current, [])
+        if "uv sync" in block:
+            stages.setdefault(current, []).append(set())
+        if "--extra" in block and stages.get(current):
+            stages[current][-1] |= set(re.findall(r"--extra (\w+)", block))
+    return stages
+
+
+def test_both_syncs_in_a_stage_ask_for_the_same_extras() -> None:
+    """`uv sync` prunes: a second sync without an extra uninstalls it.
+
+    The API image shipped with no qdrant-client this way. The deps stage installed it,
+    the final sync in the same image removed it, and the build log showed the install --
+    so the evidence pointed at a working image. At runtime the cell fell back to an
+    in-memory vector store and answered every question with "no documented information".
+    """
+    deps = _sync_extras()
+
+    for image, source in (("api", "deps-api"), ("worker", "deps-worker")):
+        installed = deps[source][0]
+        final = deps[image][0]
+        assert installed == final, (
+            f"{image}: deps stage installs {sorted(installed)} but the final sync asks "
+            f"for {sorted(final)}, which uninstalls the difference"
+        )
+
+
+def test_the_api_can_reach_the_stores_it_reads_on_every_request() -> None:
+    """Retrieval happens in the request path, so these are not optional for the API."""
+    api = _sync_extras()["api"][0]
+
+    assert {"knowledge", "memory"} <= api
+
+
+def test_the_api_does_not_carry_the_document_parsers() -> None:
+    """docling pulls torch: ~9 GB on every node, on every rollout, to open no PDFs."""
+    assert "parsing" not in _sync_extras()["api"][0]
+    assert "parsing" in _sync_extras()["worker"][0]
+
+
 # ----------------------------------------------------------------- release
 
 
