@@ -338,6 +338,20 @@ def check_capabilities(profile: AgentProfile, *, strict: bool) -> dict[str, bool
 INERT_SECURITY_VARS = ("DEV_SHARED_SECRET",)
 
 
+def build_gateway(profile: AgentProfile, env: Mapping[str, str]) -> GovernedGateway:
+    """The model gateway, from the profile and the environment.
+
+    Shared by the API, the ingestion worker and `scripts/ingest.py` because all three have
+    to route through the same policy. A worker that embedded without one would index the
+    corpus by lexical hashing and never say so at the point where it matters.
+    """
+    return GovernedGateway(
+        LiteLLMTransport.from_env(env),
+        load_model_policy(Path(env.get("LITELLM_CONFIG", "configs/litellm.yaml"))),
+        external_allowed=profile.models.external_allowed,
+    )
+
+
 def enforce_production_settings(
     settings: Settings, profile: AgentProfile, source: Mapping[str, str]
 ) -> None:
@@ -424,11 +438,7 @@ async def build_runtime(
 
     prompts = PromptRegistry.from_directory(settings.prompts_dir)
     policy = load_model_policy(settings.litellm_config)
-    gateway = GovernedGateway(
-        LiteLLMTransport.from_env(source),
-        policy,
-        external_allowed=profile.models.external_allowed,
-    )
+    gateway = build_gateway(profile, source)
 
     subgraph = load_subgraph(profile.domain.subgraph, profile.domain.intents_extra)
     planner = Planner(prompts, gateway=gateway, model_alias=profile.models.fast)

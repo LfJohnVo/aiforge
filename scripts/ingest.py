@@ -22,6 +22,7 @@ from agent_forge.core.errors import AgentForgeError, ProfileError  # noqa: E402
 from agent_forge.knowledge import build_knowledge, build_reader  # noqa: E402
 from agent_forge.observability.logging import configure_logging, get_logger  # noqa: E402
 from agent_forge.profile import format_profile_error, load_profile  # noqa: E402
+from agent_forge.runtime import build_gateway  # noqa: E402
 
 log = get_logger("scripts.ingest")
 
@@ -45,10 +46,11 @@ async def run(profile_path: Path, *, only: str | None, dry_run: bool) -> int:
         )
         return 1
 
-    # No gateway: ingestion goes through the worker's own embedding backend, and the CLI
-    # is expected to run where that backend is reachable. Without one it degrades to
-    # hashing embeddings and says so.
-    knowledge = build_knowledge(profile=profile, gateway=None, env=env)
+    # A real gateway. Passing None here degraded silently to hashing embeddings, so a
+    # corpus ingested from the CLI was indexed lexically while one ingested by the worker
+    # was indexed semantically -- the same corpus answering differently depending on who
+    # loaded it, with nothing in the output to say so.
+    knowledge = build_knowledge(profile=profile, gateway=build_gateway(profile, env), env=env)
 
     if dry_run:
         print(json.dumps({"would_sync": [s.type for s in sources]}, indent=2))
