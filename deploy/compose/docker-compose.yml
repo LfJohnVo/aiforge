@@ -295,7 +295,10 @@ services:
       GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
       GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
     volumes:
-      - ${LOCAL_CORPUS_PATH:-../../data/corpus}:/data/corpus:ro
+      # Host side, deliberately a different name: LOCAL_CORPUS_PATH is what the
+      # container sees and is fixed above. One name for both meant a `.env` copied
+      # from the example bind-mounted the container's own path from the host.
+      - ${CORPUS_HOST_PATH:-../../data/corpus}:/data/corpus:ro
     networks: [backend]
     depends_on:
       qdrant: {condition: service_healthy}
@@ -351,6 +354,9 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # prometheus.yml declara rule_files desde F7; hasta B7 el directorio no existia y
+      # la referencia no cargaba nada.
+      - ../observability/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     networks: [observability, backend]
     healthcheck:

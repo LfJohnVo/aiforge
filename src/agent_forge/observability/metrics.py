@@ -127,6 +127,16 @@ class Metrics:
             ["instance"],
             registry=self.registry,
         )
+        # Every graceful degradation in the system increments this. They are the
+        # failures that do not look like failures -- the cell keeps answering, worse --
+        # so a log line is not enough: without a counter nobody finds out until a user
+        # says the answers got vague.
+        self.degraded = Counter(
+            "agentforge_degraded_total",
+            "Times a component answered from a fallback instead of its configured backend",
+            ["component"],
+            registry=self.registry,
+        )
         self.ledger_entries = Counter(
             "agentforge_ledger_entries_total",
             "Records appended to the evidence chain",

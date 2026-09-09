@@ -103,15 +103,64 @@ levantar el perfil `observability`. Todos filtran por `$tenant`:
 5. **Gobernanza y calidad** — decisiones de política, veredictos del judge, bloqueos de
    modelo externo, entradas del ledger.
 
-## 7. Alertas mínimas
+## 7. SLOs
 
-| Alerta | Condición |
-|---|---|
-| Célula caída | `/health` readiness falla 3 veces seguidas |
-| Fail-closed activo | Errores de PDP > 0 durante 5 min |
-| Intento de fuga | `agentforge_external_model_blocked_total` crece |
-| Budget agotado | Coste del tenant supera el 90 % del mensual |
-| HITL estancado | `agentforge_hitl_pending` > 0 durante más de 24 h |
-| Cadena de evidencia rota | `verify-ledger` falla en el cron de mantenimiento |
+Tres, y no más. Un SLO por cada cosa que un usuario puede notar; lo demás son métricas.
 
-Procedimiento de respuesta para cada una en [`RUNBOOK.md`](RUNBOOK.md).
+| SLO | Objetivo | Se mide con | Ventana |
+|---|---|---|---|
+| Disponibilidad | 99.5 % de las tareas terminan sin error | `agentforge_task_duration_seconds_count{status}` | 30 días |
+| Latencia | p95 de tarea < 30 s | `agentforge_task_duration_seconds_bucket` | 30 días |
+| Fundamentación | groundedness ≥ el umbral de `evals/thresholds.yaml` | Harness de evals, muestreo semanal | por ejecución |
+
+El presupuesto de error del 0.5 % son unas 3.6 horas al mes. Consumido a la mitad de la
+ventana, la regla es dejar de desplegar cambios de prompt y de política hasta recuperarlo:
+son los dos cambios que más mueven la aguja y los más fáciles de posponer.
+
+Fundamentación no tiene percentil porque no es una distribución que se pueda muestrear en
+producción sin una respuesta de referencia: se mide contra el conjunto de evals, no contra
+el tráfico. Es una limitación real y está en las brechas de `WELL_ARCHITECTED.md`.
+
+## 8. Alertas
+
+Las reglas viven en [`deploy/observability/rules/agent-forge.yml`](../deploy/observability/rules/agent-forge.yml)
+y Prometheus las carga desde `/etc/prometheus/rules/`. Son once, en cuatro grupos.
+
+Dos criterios para que una alerta exista:
+
+1. **Si nadie va a hacer nada al recibirla, es un panel.** Cada regla lleva `runbook`
+   apuntando a la sección de [`RUNBOOK.md`](RUNBOOK.md) que dice qué hacer, y hay un test
+   que comprueba que esa sección existe: un enlace a un procedimiento que nadie escribió
+   se lee como si hubiera procedimiento, justo hasta que alguien lo necesita.
+2. **La severidad es sobre el daño, no sobre la rareza.** `page` despierta a alguien,
+   `ticket` espera a mañana.
+
+| Alerta | Sev | Dispara cuando |
+|---|---|---|
+| `AgentForgeCelulaCaida` | page | Prometheus no alcanza la célula durante 2 min |
+| `AgentForgeTareasFallando` | page | Más del 5 % de tareas en error, 10 min |
+| `AgentForgeIntentoDeFugaC3C4` | page | `agentforge_external_model_blocked_total` crece, aunque sea una vez |
+| `AgentForgeLedgerSinEscrituras` | page | Hay tráfico y la cadena no crece |
+| `AgentForgeLatenciaFueraDeSLO` | ticket | p95 > 30 s durante 15 min |
+| `AgentForgePicoDeDenegaciones` | ticket | El PDP deniega más de lo normal |
+| `AgentForgeDlpRedactandoSalida` | ticket | El DLP recorta respuestas de forma sostenida |
+| `AgentForgeComponenteDegradado` | ticket | Un componente responde desde su fallback |
+| `AgentForgeRecuperacionVacia` | ticket | La mediana de resultados recuperados baja de 1 |
+| `AgentForgeAprobacionesEstancadas` | ticket | Más de 5 aprobaciones pendientes 2 h |
+| `AgentForgeLimitandoTrafico` | ticket | Se rechaza tráfico por exceso de peticiones |
+
+Las cuatro de `page` tienen algo en común y conviene verlo: ninguna es sobre rendimiento.
+Son *no responde*, *falla*, *intentó fugarse un dato* y *dejó de poder demostrar lo que
+hace*. Una célula lenta molesta; una célula que atiende sin registrar evidencia es un
+problema de auditoría que crece mientras nadie mira.
+
+### Degradaciones, que no parecen fallos
+
+`agentforge_degraded_total{component}` cuenta cada vez que un componente contesta desde su
+fallback en lugar de su backend configurado. Es la métrica más importante de esta lista y
+la menos obvia: con los embeddings degradados el corpus se indexa por coincidencia léxica,
+las respuestas siguen saliendo, las citas siguen apareciendo, y nadie se entera hasta que
+alguien pregunta con otras palabras. Sin contador, eso sólo vive en un log.
+
+Nada de esto verifica que las alertas *lleguen* a algún sitio. El enrutado —Alertmanager,
+guardias, canales— es del despliegue, no de la célula, y no está aquí.

@@ -24,6 +24,7 @@ from agent_forge.core.classification import Classification
 from agent_forge.core.errors import CapabilityUnavailableError, ModelGatewayError
 from agent_forge.gateway.litellm_client import GovernedGateway
 from agent_forge.observability.logging import get_logger
+from agent_forge.observability.metrics import get_metrics
 
 log = get_logger(__name__)
 
@@ -192,4 +193,5 @@ async def safe_embed(
             detail=str(exc),
             impact="these chunks are indexed lexically and will not match paraphrases",
         )
+        get_metrics().degraded.labels(component="embeddings").inc()
         return await fallback.embed(texts)

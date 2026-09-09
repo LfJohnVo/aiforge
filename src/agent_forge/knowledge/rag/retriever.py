@@ -312,6 +312,7 @@ class GatewayReranker:
                 detail=str(exc),
                 impact="results keep their fused order; relevance is weaker than configured",
             )
+            get_metrics().degraded.labels(component="rerank").inc()
             return await self._fallback.rerank(query, results, limit=limit)
 
         rescored = [

@@ -23,6 +23,7 @@ COMPOSE = REPO_ROOT / "deploy" / "compose" / "docker-compose.yml"
 DOCKERFILE = REPO_ROOT / "deploy" / "compose" / "Dockerfile"
 CHART = REPO_ROOT / "deploy" / "helm" / "agent-forge"
 DASHBOARDS = REPO_ROOT / "deploy" / "observability" / "grafana" / "dashboards"
+RULES = REPO_ROOT / "deploy" / "observability" / "rules"
 
 
 # ----------------------------------------------------------- instance generator
@@ -438,6 +439,89 @@ def _metric_tokens(expr: str) -> set[str]:
                 break
         names.add(raw)
     return names
+
+
+# --------------------------------------------------------------------- alert rules
+
+
+def _alert_rules() -> list[dict]:
+    rules: list[dict] = []
+    for path in sorted(RULES.glob("*.yml")):
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for group in document["groups"]:
+            for rule in group["rules"]:
+                rule["_file"] = path.name
+                rules.append(rule)
+    return rules
+
+
+def test_prometheus_actually_loads_the_rules_directory() -> None:
+    """`rule_files` pointed at a directory that did not exist until B7."""
+    config = yaml.safe_load((REPO_ROOT / "deploy/observability/prometheus.yml").read_text("utf-8"))
+    compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+
+    assert config["rule_files"] == ["/etc/prometheus/rules/*.yml"]
+    mounts = compose["services"]["prometheus"]["volumes"]
+    assert any("/etc/prometheus/rules" in mount for mount in mounts)
+    assert list(RULES.glob("*.yml")), "rule_files matches nothing"
+
+
+def test_every_alert_names_a_metric_the_cell_emits() -> None:
+    """An alert on a metric nobody exports never fires, and looks exactly like health."""
+    from agent_forge.observability.metrics import Metrics
+
+    emitted = {collector.name for collector in Metrics().registry.collect()}
+
+    for rule in _alert_rules():
+        for token in _metric_tokens(rule["expr"]):
+            assert token in emitted, f"{rule['_file']}/{rule['alert']}: {token}"
+
+
+def _runbook_anchors() -> set[str]:
+    """GitHub's heading-to-anchor rule: lowercase, drop punctuation, spaces to dashes."""
+    import re
+    import unicodedata
+
+    anchors = set()
+    text = (REPO_ROOT / "docs" / "RUNBOOK.md").read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if not line.startswith("#"):
+            continue
+        heading = line.lstrip("#").strip().lower()
+        # Accents survive in GitHub anchors; punctuation and dots do not.
+        slug = "".join(
+            c
+            for c in unicodedata.normalize("NFC", heading)
+            if c.isalnum() or c in " -_" or unicodedata.combining(c)
+        )
+        anchors.add(re.sub(r"\s+", "-", slug.strip()))
+    return anchors
+
+
+def test_every_alert_links_to_a_runbook_section_that_exists() -> None:
+    """If nobody would act on it, it is a dashboard panel, not an alert.
+
+    And a link to a section that was never written is worse than no link: it reads like
+    there is a procedure right up to the moment someone needs it.
+    """
+    anchors = _runbook_anchors()
+
+    for rule in _alert_rules():
+        assert rule["annotations"]["summary"], rule["alert"]
+        anchor = rule["annotations"]["runbook"].split("#", 1)[1]
+        assert anchor in anchors, f"{rule['alert']} points at RUNBOOK.md#{anchor}, absent"
+
+
+def test_severity_is_page_only_for_damage_that_cannot_wait() -> None:
+    """Waking someone for something that keeps until morning is how alerts get muted."""
+    paging = {rule["alert"] for rule in _alert_rules() if rule["labels"]["severity"] == "page"}
+
+    assert paging == {
+        "AgentForgeCelulaCaida",
+        "AgentForgeTareasFallando",
+        "AgentForgeIntentoDeFugaC3C4",
+        "AgentForgeLedgerSinEscrituras",
+    }
 
 
 def test_every_dashboard_filters_by_tenant() -> None:

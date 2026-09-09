@@ -145,6 +145,87 @@ encuentra un montaje en el antiguo `/var/lib/postgresql/data`: lo lee como un cl
 actualizar. El compose ya monta en la ruta correcta; si aparece tras una migración, es un
 volumen viejo y hay que hacer `pg_upgrade`, no mover el montaje.
 
+### 3.7 Latencia por encima del SLO
+
+Alerta `AgentForgeLatenciaFueraDeSLO`. El SLO es p95 de tarea por debajo de 30 s.
+
+Mira primero **dónde** se va el tiempo, no cuánto: el panel 02 desglosa
+`agentforge_node_duration_seconds` por nodo. Los tres repartos habituales:
+
+| Nodo dominante | Causa casi siempre | Qué hacer |
+|---|---|---|
+| `plan` o `synthesise` | El modelo está encolando | `nvidia-smi`: si la GPU está al 100 % de forma sostenida, sobran peticiones concurrentes para una tarjeta |
+| `retrieve` | Qdrant sin índice de payload, o `top_k` demasiado alto | Revisar el perfil; `top_k: 8` es el punto medido |
+| `quality_gate` | El juez está usando el modelo grande | Debe usar `models.fast` |
+
+Si el p95 se disparó sin que cambiara el tráfico, sospecha del reranker: un
+cross-encoder añade una llamada de modelo por candidato.
+
+### 3.8 El DLP redacta la salida
+
+Alerta `AgentForgeDlpRedactandoSalida`.
+
+Que el DLP recorte **la salida** no es el sistema funcionando bien: es el sistema
+tapando un fallo anterior. Significa que el modelo construyó una respuesta con datos
+que no debería haber recuperado, y el DLP fue la última red.
+
+1. `agentforge_dlp_findings_total{direction="output"}` por `rule` dice qué se está
+   filtrando.
+2. Busca en el ledger las tareas de esa ventana y mira **qué chunks** se recuperaron.
+3. Si los chunks no debían ser visibles para ese usuario, el fallo está en el ACL de la
+   fuente, no en el DLP: revisa `default_acl_groups` de la fuente en el perfil, que es lo
+   que hereda un documento sin ACL propia.
+
+No subas el umbral del DLP para silenciar la alerta. Arregla la ingesta.
+
+### 3.9 Degradaciones silenciosas
+
+Alerta `AgentForgeComponenteDegradado`, métrica `agentforge_degraded_total{component}`.
+
+Estas son las averías que no parecen averías: la célula sigue contestando, peor.
+
+**`component="embeddings"`** — el gateway de embeddings no responde y el corpus se está
+indexando por coincidencia léxica. Las respuestas siguen saliendo y las citas siguen
+apareciendo, pero ninguna pregunta encontrará una paráfrasis. Comprueba:
+
+```bash
+docker compose logs litellm | grep -i embed
+curl -s http://127.0.0.1:4000/v1/models | grep embeddings
+```
+
+Lo más común es que `EMBEDDING_MODEL` apunte a un alias que ningún backend sirve —
+`local/embeddings` necesita vLLM; en una máquina sin GPU libre va `local/embeddings-dev`.
+**Después de arreglarlo hay que reindexar**: los chunks que entraron degradados siguen
+degradados.
+
+**`component="rerank"`** — el cross-encoder no responde y el orden es el de la fusión RRF.
+Menos grave: la recuperación es la misma, sólo peor ordenada.
+
+### 3.10 Respuestas sin citas
+
+Alerta `AgentForgeRecuperacionVacia`.
+
+En orden, porque el orden ahorra tiempo:
+
+1. **¿Hay corpus?** `docker compose exec agent-api python -m scripts.ingest --dry-run`
+2. **¿Se ingestó?** El worker registra cuántos chunks escribió por sincronización.
+3. **¿Los embeddings son de verdad?** Si además hay
+   `agentforge_degraded_total{component="embeddings"}`, ve a 3.9: es eso.
+4. **¿El usuario puede ver algo?** Un usuario sin ninguno de los grupos del corpus recibe
+   cero resultados **por diseño** (invariante 2) y es indistinguible de un corpus vacío.
+   Compruébalo con un usuario que sí tenga el grupo antes de seguir investigando.
+
+### 3.11 Límite de tasa activo
+
+Alerta `AgentForgeLimitandoTrafico`, métrica `agentforge_rate_limited_total`.
+
+Casi nunca es un pico legítimo: es un bucle en una integración. **Antes de subir
+`RATE_LIMIT_PER_MINUTE`**, averigua qué credencial está inundando —los logs de acceso
+llevan el hash de credencial que usa el limitador— y habla con quien la usa.
+
+Subir el límite sin mirar convierte un bucle ajeno en una caída propia: el límite existe
+para que la célula sobreviva al bucle, no para que el bucle sea cómodo.
+
 ## 4. Backups
 
 | Almacén | Método | Frecuencia |

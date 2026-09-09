@@ -1,0 +1,163 @@
+# Alertas de una célula. `prometheus.yml` ya cargaba `/etc/prometheus/rules/*.yml`; hasta
+# ahora ese directorio no existía.
+#
+# Dos reglas para escribir una alerta aquí, y las dos vienen de haber sido despertado por
+# alertas malas:
+#
+#   1. Si nadie va a hacer nada al recibirla, es un panel, no una alerta. Cada una lleva
+#      `runbook` apuntando a la sección de `RUNBOOK.md` que dice qué hacer.
+#   2. La severidad es sobre el daño, no sobre lo raro que sea. `page` despierta a alguien;
+#      `ticket` espera a mañana. Una fuga de datos es `page` aunque ocurra una vez al año;
+#      una latencia alta es `ticket` aunque ocurra a diario.
+#
+# Las expresiones se comprueban en tests/unit/test_observability.py: toda métrica nombrada
+# aquí tiene que ser una que la célula emita de verdad. Una alerta sobre una métrica que no
+# existe nunca dispara, y se ve exactamente igual que un sistema sano.
+
+groups:
+  # --------------------------------------------------------------- disponibilidad
+  - name: agent-forge-disponibilidad
+    rules:
+      - alert: AgentForgeCelulaCaida
+        expr: up{job="agent-api"} == 0
+        for: 2m
+        labels: {severity: page, pillar: fiabilidad}
+        annotations:
+          summary: "La célula no responde al scrape"
+          description: "Prometheus no alcanza agent-api:8080/metrics desde hace 2 minutos."
+          runbook: "RUNBOOK.md#2-diagnóstico-rápido"
+
+      - alert: AgentForgeTareasFallando
+        expr: |
+          sum(rate(agentforge_task_duration_seconds_count{status="error"}[5m]))
+            /
+          clamp_min(sum(rate(agentforge_task_duration_seconds_count[5m])), 0.001)
+            > 0.05
+        for: 10m
+        labels: {severity: page, pillar: fiabilidad}
+        annotations:
+          summary: "Más del 5% de las tareas terminan en error"
+          description: "Ratio de error {{ $value | humanizePercentage }} sostenido 10 minutos."
+          runbook: "RUNBOOK.md#2-diagnóstico-rápido"
+
+      # El SLO es sobre el percentil, no sobre la media: la media esconde justo la cola
+      # que hace que alguien abandone la conversación.
+      - alert: AgentForgeLatenciaFueraDeSLO
+        expr: |
+          histogram_quantile(
+            0.95, sum by (le) (rate(agentforge_task_duration_seconds_bucket[10m]))
+          ) > 30
+        for: 15m
+        labels: {severity: ticket, pillar: rendimiento}
+        annotations:
+          summary: "p95 de tarea por encima de 30 s"
+          description: "p95 = {{ $value | humanizeDuration }}. SLO: 30 s."
+          runbook: "RUNBOOK.md#37-latencia-por-encima-del-slo"
+
+  # --------------------------------------------------------------------- seguridad
+  - name: agent-forge-seguridad
+    rules:
+      # La alerta es sobre el *incremento*, no sobre un umbral: una sola vez ya significa
+      # que algo intentó mandar datos clasificados fuera del perímetro.
+      - alert: AgentForgeIntentoDeFugaC3C4
+        expr: increase(agentforge_external_model_blocked_total[10m]) > 0
+        labels: {severity: page, pillar: seguridad}
+        annotations:
+          summary: "Se bloqueó contenido clasificado camino a un modelo externo"
+          description: >-
+            {{ $value }} intentos para el tenant {{ $labels.tenant }},
+            clasificación {{ $labels.classification }}. El control funcionó; lo que hay que
+            averiguar es qué los provocó.
+          runbook: "RUNBOOK.md#32-intento-de-fuga-de-datos-clasificados"
+
+      - alert: AgentForgePicoDeDenegaciones
+        expr: |
+          sum(rate(agentforge_policy_decisions_total{effect="deny"}[10m])) > 1
+        for: 10m
+        labels: {severity: ticket, pillar: seguridad}
+        annotations:
+          summary: "El PDP está denegando más de lo normal"
+          description: >-
+            Suele ser una política recién desplegada o un grupo mal mapeado, no un ataque.
+            Empieza por la última entrada de configs/policies/.
+          runbook: "RUNBOOK.md#31-pdp-inalcanzable-fail-closed-activo"
+
+      - alert: AgentForgeDlpRedactandoSalida
+        expr: |
+          sum(rate(agentforge_dlp_findings_total{direction="output", action="redact"}[15m])) > 0.2
+        for: 15m
+        labels: {severity: ticket, pillar: seguridad}
+        annotations:
+          summary: "El DLP está redactando respuestas de forma sostenida"
+          description: >-
+            Que el DLP recorte la salida quiere decir que el modelo está construyendo
+            respuestas con datos que no debería haber recuperado. El fallo está antes.
+          runbook: "RUNBOOK.md#38-el-dlp-redacta-la-salida"
+
+  # ---------------------------------------------------------------------- evidencia
+  - name: agent-forge-evidencia
+    rules:
+      # Una cadena que deja de crecer mientras hay tráfico es peor que una caída: el
+      # sistema sigue respondiendo y deja de poder demostrar lo que hizo.
+      - alert: AgentForgeLedgerSinEscrituras
+        expr: |
+          sum(rate(agentforge_task_duration_seconds_count[15m])) > 0
+            and
+          sum(rate(agentforge_ledger_entries_total[15m])) == 0
+        for: 15m
+        labels: {severity: page, pillar: seguridad}
+        annotations:
+          summary: "Hay tareas pero la cadena de evidencia no crece"
+          description: "Se está atendiendo tráfico sin registrar evidencia de ello."
+          runbook: "RUNBOOK.md#6-cadena-de-evidencia-rota"
+
+  # ------------------------------------------------------------------- degradación
+  - name: agent-forge-degradacion
+    rules:
+      # Las que no parecen fallos: la célula sigue contestando, peor.
+      - alert: AgentForgeComponenteDegradado
+        expr: increase(agentforge_degraded_total[15m]) > 0
+        labels: {severity: ticket, pillar: excelencia-operativa}
+        annotations:
+          summary: "{{ $labels.component }} está respondiendo desde su fallback"
+          description: >-
+            Con component=embeddings el corpus se está indexando por coincidencia léxica y
+            no encontrará paráfrasis; con component=rerank el orden es el de la fusión.
+            En ambos casos las respuestas empeoran sin que nada falle.
+          runbook: "RUNBOOK.md#39-degradaciones-silenciosas"
+
+      - alert: AgentForgeRecuperacionVacia
+        expr: |
+          histogram_quantile(
+            0.5, sum by (le) (rate(agentforge_retrieval_results_bucket[15m]))
+          ) < 1
+        for: 20m
+        labels: {severity: ticket, pillar: excelencia-operativa}
+        annotations:
+          summary: "La mitad de las búsquedas no devuelven nada"
+          description: >-
+            Corpus vacío, ingesta parada o embeddings rotos. Si además hay
+            agentforge_degraded_total{component="embeddings"}, es lo tercero.
+          runbook: "RUNBOOK.md#310-respuestas-sin-citas"
+
+      - alert: AgentForgeAprobacionesEstancadas
+        expr: max(agentforge_hitl_pending) > 5
+        for: 2h
+        labels: {severity: ticket, pillar: excelencia-operativa}
+        annotations:
+          summary: "Aprobaciones pendientes acumulándose"
+          description: >-
+            {{ $value }} tareas esperando aprobación humana desde hace dos horas. O el grupo
+            aprobador no está mirando, o el mapa de autonomía pide aprobación de más.
+          runbook: "RUNBOOK.md#34-cola-hitl-estancada"
+
+      - alert: AgentForgeLimitandoTrafico
+        expr: increase(agentforge_rate_limited_total[10m]) > 10
+        for: 10m
+        labels: {severity: ticket, pillar: fiabilidad}
+        annotations:
+          summary: "Se está rechazando tráfico por exceso de peticiones"
+          description: >-
+            Casi siempre es un bucle en una integración, no un pico legítimo. Antes de
+            subir RATE_LIMIT_PER_MINUTE, averigua qué credencial está inundando.
+          runbook: "RUNBOOK.md#311-límite-de-tasa-activo"
