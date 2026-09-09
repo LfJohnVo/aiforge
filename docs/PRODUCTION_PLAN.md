@@ -73,13 +73,28 @@ todo sería peor que dejarlos escritos:
   funcionando. Medido: no. Es el lado seguro del error, pero la documentación y el código
   no dicen lo mismo.
 
+### Las rutas A y B, cerradas
+
+Todo lo que no dependía de credenciales ajenas se ejecutó:
+
+| | |
+|---|---|
+| **A7** carga | 0.10 req/s de techo; a partir de 2 peticiones simultáneas la GPU encola |
+| **B4** ADR-010 | Q-01 cerrada con esos números: Qwen3-8B, bge-m3, `local/quality` aplazado |
+| **B8** respaldos | Postgres + Qdrant + ledger verificado; sin planificador propio, lo llama el cron del host |
+| **A6** restauración | **ejecutada**: 87 tablas y 410 checkpoints de LangGraph vueltos a la vida en un Postgres desechable |
+| **B10** corpus hostil | 31 casos, y el gate ya no pasa por vacío |
+
 ### Lo que no está hecho
 
-* **B4** (ADR-010 de modelos) espera a los números de A7, que no se ejecutó.
-* **B8** (respaldos automáticos) y **B10** (corpus hostil): no empezados.
-* **A6** (simulacro de restauración) y **A7** (prueba de carga): no ejecutados.
 * **Ruta C** entera: necesita credenciales de nube y las siete decisiones de §7.
 * **Ruta D**: necesita usuarios reales.
+* **Repetir las evals contra una colección limpia.** La corrida del 2026-09-09 mezcló el
+  corpus de evals con el de la PoC en el mismo Qdrant, así que `groundedness`,
+  `answer_relevancy` y `context_precision` de esa corrida **no son válidos**. Las métricas
+  de seguridad sí: cero en ACL, soberanía, PII y jailbreak.
+* **Decidir si la inyección por documento funciona** (Q-11). El scorer compara subcadenas
+  y no distingue obedecer de citar; con eso no se puede afirmar ni una cosa ni la otra.
 
 ## 1. Esta máquina (medido)
 
