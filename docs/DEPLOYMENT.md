@@ -116,8 +116,19 @@ Diferencias respecto a desarrollo:
 
 1. TLS terminado en un reverse proxy; `agent-api` nunca expuesto directamente.
 2. Secretos desde el gestor de secretos de la plataforma, no desde `.env` en disco.
-3. `AGENT_FORGE_ENV=production`: desactiva la documentación interactiva, exige OIDC y
-   rechaza `GOVERNANCE_FAIL_MODE=permissive_c0c1` sin confirmación explícita.
+3. `AGENT_FORGE_ENV=production` endurece el arranque. Lo aplica
+   `runtime.enforce_production_settings`, y cada regla es un fallo de arranque con su
+   motivo, no un aviso —los tres problemas se reportan juntos, para no gastar tres
+   reinicios en descubrirlos—:
+
+   | Regla | Por qué |
+   |---|---|
+   | Exige `OIDC_ISSUER` **y** `OIDC_JWKS_URL` | Una API key identifica al *tenant*, no a la persona: sin usuario no hay grupos y la recuperación por identidad no tiene por dónde filtrar (invariante 4) |
+   | `fail_mode: permissive_c0c1` sólo con `GOVERNANCE_ACK_PERMISSIVE=1` | Legítimo durante una caída del PDP, nunca por defecto (invariante 3) |
+   | Rechaza `DEV_SHARED_SECRET` | No lo lee ningún camino de código: puesto en un `.env` copiado, hace creer que hay una autenticación que no existe |
+
+   Además desactiva `/docs` y `/openapi.json`, y convierte en fatal cualquier extra
+   declarado en el perfil que no esté instalado (`check_capabilities`, ADR-005).
 4. Backups: snapshots de Qdrant, `pg_dump` de Postgres, dump de Neo4j y copia del
    ledger. Frecuencia y verificación en [`RUNBOOK.md`](RUNBOOK.md).
 5. Imágenes por digest, no por tag móvil.

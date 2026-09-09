@@ -28,7 +28,11 @@ from agent_forge.connectors.mcp_client import McpGatewayConnector
 from agent_forge.connectors.n8n import N8nConnector, WorkflowSpec
 from agent_forge.connectors.repo_graph import RepoGraphConnector
 from agent_forge.core.checkpointer import CheckpointerKind, open_checkpointer
-from agent_forge.core.errors import CapabilityUnavailableError, ProfileError
+from agent_forge.core.errors import (
+    CapabilityUnavailableError,
+    InsecureConfigurationError,
+    ProfileError,
+)
 from agent_forge.core.graph import GraphDeps, build_graph
 from agent_forge.core.hitl import ApprovalPolicy, ApprovalStore, InMemoryApprovalStore
 from agent_forge.core.planner import Planner
@@ -327,6 +331,63 @@ def check_capabilities(profile: AgentProfile, *, strict: bool) -> dict[str, bool
     return installed
 
 
+# Environment variables that read like security settings but configure nothing. Set in
+# production, each one means an operator believes a control is on that is not. They were
+# left behind by earlier drafts; the check is cheaper than trusting nobody copies an old
+# `.env`.
+INERT_SECURITY_VARS = ("DEV_SHARED_SECRET",)
+
+
+def enforce_production_settings(
+    settings: Settings, profile: AgentProfile, source: Mapping[str, str]
+) -> None:
+    """Refuse to start production with a development configuration.
+
+    Three rules, each one a boot failure rather than a warning, because every one of them
+    is invisible once the cell is serving: nobody notices that identity is tenant-wide,
+    or that a stale policy answered, until it matters.
+
+    Outside production this does nothing at all: the quickstart has to work with an API
+    key and no identity provider.
+    """
+    if not settings.is_production:
+        return
+
+    reasons: list[str] = []
+
+    # Invariant 4. An API key names a *tenant*, not a person, so identity-aware retrieval
+    # has no groups to filter on and every user of that tenant sees the same corpus. That
+    # is acceptable on a laptop and is a data leak in production.
+    if not (source.get("OIDC_ISSUER") and source.get("OIDC_JWKS_URL")):
+        reasons.append(
+            "OIDC is not configured (OIDC_ISSUER and OIDC_JWKS_URL); an API key "
+            "identifies a tenant, not a user, so retrieval cannot filter by group"
+        )
+
+    # Invariant 3. permissive_c0c1 lets an expired decision answer for C0/C1. Legitimate
+    # during an OPA outage, never a default, so production has to say it out loud.
+    if (
+        profile.governance.fail_mode == "permissive_c0c1"
+        and source.get("GOVERNANCE_ACK_PERMISSIVE") != "1"
+    ):
+        reasons.append(
+            "profile sets governance.fail_mode=permissive_c0c1; in production this "
+            "needs GOVERNANCE_ACK_PERMISSIVE=1 to confirm it is deliberate"
+        )
+
+    inert = sorted(name for name in INERT_SECURITY_VARS if source.get(name))
+    if inert:
+        reasons.append(
+            f"{', '.join(inert)} set but read by nothing; remove them rather than "
+            "rely on a control that does not exist"
+        )
+
+    if reasons:
+        raise InsecureConfigurationError(
+            "AGENT_FORGE_ENV=production rejects this configuration", reasons=reasons
+        )
+
+
 def load_model_policy(path: Path) -> ModelPolicy:
     if not path.is_file():
         raise ProfileError("litellm config not found", path=str(path))
@@ -353,6 +414,7 @@ async def build_runtime(
     )
 
     profile = load_profile(settings.profile_path, env=dict(source))
+    enforce_production_settings(settings, profile, source)
     capabilities = check_capabilities(profile, strict=settings.is_production)
 
     # Before anything else that might want to emit a span: a tracer installed halfway

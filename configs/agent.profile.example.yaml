@@ -153,7 +153,7 @@ governance:
   # closed = niega C2+ y A2+ sin decision fresca (recomendado).
   # permissive_c0c1 = ademas permite C0/C1 con politicas cacheadas expiradas.
   # Ni siquiera permissive_c0c1 levanta la restriccion para C3/C4 ni A2+.
-  fail_mode: closed
+  fail_mode: ${GOVERNANCE_FAIL_MODE:-closed}
   hitl_approvers_group: "finanzas-lideres"
   dlp:
     enabled: true

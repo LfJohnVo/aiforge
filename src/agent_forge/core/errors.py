@@ -42,6 +42,18 @@ class ProfileError(AgentForgeError):
     http_status = 500
 
 
+class InsecureConfigurationError(AgentForgeError):
+    """Production was asked to start with a configuration only development may use.
+
+    Raised at startup and never recovered from. The alternative -- warn and continue --
+    is how a cell ends up serving real users with development authentication, which is
+    exactly the failure the check exists to prevent.
+    """
+
+    code = "insecure_configuration"
+    http_status = 500
+
+
 class CapabilityUnavailableError(AgentForgeError):
     """The profile asks for a capability whose optional extra is not installed.
 
