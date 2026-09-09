@@ -441,6 +441,43 @@ def _metric_tokens(expr: str) -> set[str]:
     return names
 
 
+# ----------------------------------------------------------------- release
+
+
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
+
+
+def test_the_release_pipeline_publishes_signs_and_attests() -> None:
+    """CI built the image only to scan it and threw it away.
+
+    Nothing that CI verified ever reached a registry, so the deployable artefact was
+    whatever someone built on a laptop.
+    """
+    release = yaml.safe_load((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+
+    # `on` is parsed by YAML as the boolean True. Accept either spelling.
+    triggers = release.get("on") or release.get(True)
+    assert list(triggers["push"]["tags"]) == ["v*"], "publishing must be a tagged decision"
+
+    raw = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+    assert "cosign sign" in raw
+    assert "attest-build-provenance" in raw
+    # By digest, never by tag: a tag can point somewhere else tomorrow, which turns a
+    # rollback into a lottery.
+    assert "steps.build.outputs.digest" in raw
+    assert "DIGEST: ${{ steps.build.outputs.digest }}" in raw
+
+
+def test_the_release_runs_the_whole_gate_on_the_tag() -> None:
+    """main being green says nothing about the commit being tagged."""
+    release = yaml.safe_load((WORKFLOWS / "release.yml").read_text(encoding="utf-8"))
+
+    gate = yaml.safe_dump(release["jobs"]["verify"])
+    for command in ("ruff check", "mypy", "pytest", "docs_check"):
+        assert command in gate, command
+    assert release["jobs"]["publish"]["needs"] == "verify"
+
+
 # ------------------------------------------------------------ production override
 
 

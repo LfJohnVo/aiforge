@@ -1,0 +1,147 @@
+# Corta una release: construye, publica por digest, firma y adjunta la procedencia.
+#
+# Hasta ahora `security.yml` construía la imagen sólo para escanearla y la tiraba, así que
+# nada de lo que CI verificaba llegaba nunca a un registro. La skill `release` terminaba en
+# el tag de git. Este workflow es lo que va del tag a algo desplegable.
+#
+# Se dispara con un tag `v*`, nunca con un push a main: publicar es una decisión, y una
+# decisión tiene que tener un nombre y una fecha.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag a publicar (p. ej. v0.2.0)"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  # El token OIDC del propio runner es la clave de firma: cosign en modo keyless no
+  # guarda ninguna clave privada, y por tanto no hay ninguna que rotar ni que se filtre.
+  id-token: write
+  attestations: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # El gate completo otra vez, sobre el tag. Que main estuviera verde no dice nada del
+  # commit que se está etiquetando.
+  verify:
+    name: Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev --extra databases
+      - run: uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
+      - run: uv run mypy
+      - run: uv run pytest tests/unit tests/policies -m "not integration and not e2e"
+      - run: uv run python scripts/docs_check.py --strict
+
+  publish:
+    name: Publish ${{ matrix.target }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [api, worker]
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.target }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/compose/Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      # El escaneo va DESPUÉS de publicar y antes de firmar, a propósito: una imagen sin
+      # firmar en el registro es inerte --nada la despliega-- mientras que escanear una
+      # imagen local y publicar otra distinta es cómo se cuela una diferencia.
+      - name: Escanear la imagen publicada
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.target }}@${{ steps.build.outputs.digest }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+
+      - uses: sigstore/cosign-installer@v3
+
+      # Keyless: la identidad que firma es la del workflow, y queda en el log público de
+      # transparencia. Verificar exige nombrar ese workflow, así que una imagen firmada
+      # por otro repositorio no pasa.
+      - name: Firmar por digest
+        run: |
+          cosign sign --yes \
+            "${REGISTRY}/${REPO}/${TARGET}@${DIGEST}"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          REPO: ${{ github.repository }}
+          TARGET: ${{ matrix.target }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Adjuntar la procedencia
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.target }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Resumen
+        run: |
+          {
+            echo "### ${TARGET}"
+            echo ''
+            echo "Digest: \`${DIGEST}\`"
+            echo ''
+            echo 'Verificar antes de desplegar:'
+            echo '```bash'
+            echo "cosign verify ${REGISTRY}/${REPO}/${TARGET}@${DIGEST} \\"
+            echo "  --certificate-identity-regexp '^https://github.com/${REPO}/' \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          REPO: ${{ github.repository }}
+          TARGET: ${{ matrix.target }}
+          DIGEST: ${{ steps.build.outputs.digest }}
