@@ -141,3 +141,9 @@ scan-image: ## Scan the shipped image; CRITICAL blocks
 clean: ## Remove caches and build artefacts
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov coverage.xml .coverage dist build
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
+
+backup: ## Respalda Postgres, Qdrant y el ledger en var/backups
+	$(RUN) python scripts/backup.py --out "$${BACKUP_DIR:-var/backups}"
+
+backup-verify: ## Comprueba la cadena de evidencia sin escribir nada
+	$(RUN) python scripts/backup.py --verify-only
