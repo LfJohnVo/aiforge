@@ -212,6 +212,7 @@ def make_app(runtime: Any, env: dict[str, str] | None = None) -> Any:
     from fastapi import FastAPI
 
     from agent_forge.api.app import _mount_channels, create_app
+    from agent_forge.api.ratelimit import build_rate_limiter
 
     environment = env or cell_env()
     app = create_app(settings=runtime.settings, env=environment)
@@ -220,6 +221,9 @@ def make_app(runtime: Any, env: dict[str, str] | None = None) -> Any:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         async with AsyncExitStack() as stack:
             app.state.runtime = runtime
+            app.state.rate_limiter = build_rate_limiter(
+                runtime.memory.store, env=environment, instance=runtime.settings.instance
+            )
             await _mount_channels(app, runtime, stack)
             yield
 

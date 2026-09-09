@@ -118,6 +118,15 @@ class Metrics:
             ["tenant", "classification"],
             registry=self.registry,
         )
+        # Not labelled by caller: the label would be a hash of a credential, which is
+        # unbounded cardinality and, worse, a stable identifier for a person in a metrics
+        # store that is not access-controlled the way the ledger is.
+        self.rate_limited = Counter(
+            "agentforge_rate_limited_total",
+            "Requests refused because the caller exceeded its per-minute quota",
+            ["instance"],
+            registry=self.registry,
+        )
         self.ledger_entries = Counter(
             "agentforge_ledger_entries_total",
             "Records appended to the evidence chain",

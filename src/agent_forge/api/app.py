@@ -9,14 +9,20 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from agent_forge import __version__
 from agent_forge.api import admin, health, metrics
+from agent_forge.api.ratelimit import (
+    EXEMPT_PREFIXES,
+    RateLimiter,
+    build_rate_limiter,
+    credential_key,
+)
 from agent_forge.channels import n8n_callback, openai_api
 from agent_forge.core.errors import AgentForgeError, ProfileError
 from agent_forge.observability.logging import clear_request_context, get_logger
@@ -45,6 +51,9 @@ def create_app(
                 log.error("startup.profile_invalid", detail=format_profile_error(exc))
                 raise
             app.state.runtime = runtime
+            app.state.rate_limiter = build_rate_limiter(
+                runtime.memory.store, env=env, instance=resolved.instance
+            )
             await _mount_channels(app, runtime, stack)
             yield
 
@@ -61,12 +70,55 @@ def create_app(
     )
 
     _install_cors(app, env)
+    _install_rate_limit(app)
     _install_error_handlers(app)
 
     app.include_router(health.router)
     app.include_router(metrics.router)
     app.include_router(admin.router)
     return app
+
+
+def _install_rate_limit(app: FastAPI) -> None:
+    """Refuse a caller that is flooding, before the request reaches a router.
+
+    Registered unconditionally and decided per request: the limiter itself only exists
+    once the lifespan has built the runtime, and a middleware cannot be added after
+    startup. Before that -- and for the probes -- every request passes.
+    """
+
+    @app.middleware("http")
+    async def _limit(request: Request, call_next: Any) -> Response:
+        limiter: RateLimiter | None = getattr(app.state, "rate_limiter", None)
+        if limiter is None or not limiter.enabled or request.url.path.startswith(EXEMPT_PREFIXES):
+            return cast(Response, await call_next(request))
+
+        verdict = await limiter.check(
+            credential_key(
+                request.headers.get("authorization"),
+                request.headers.get("x-api-key"),
+                request.client.host if request.client else "unknown",
+            )
+        )
+        if not verdict.allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "code": "rate_limited",
+                    "message": "too many requests for this credential",
+                    "retry_after_seconds": verdict.retry_after,
+                },
+                headers={
+                    "Retry-After": str(verdict.retry_after),
+                    "X-RateLimit-Limit": str(verdict.limit),
+                    "X-RateLimit-Remaining": "0",
+                },
+            )
+
+        response = cast(Response, await call_next(request))
+        response.headers["X-RateLimit-Limit"] = str(verdict.limit)
+        response.headers["X-RateLimit-Remaining"] = str(verdict.remaining)
+        return response
 
 
 async def _mount_channels(app: FastAPI, runtime: Runtime, stack: AsyncExitStack) -> None:

@@ -55,6 +55,8 @@ class KeyValueStore(Protocol):
 
     async def delete(self, *keys: str) -> int: ...
 
+    async def incr(self, key: str, *, ttl_seconds: int) -> int: ...
+
     def scan(self, pattern: str) -> AsyncIterator[str]: ...
 
     async def health(self) -> bool: ...
@@ -93,6 +95,13 @@ class InMemoryStore:
 
     async def delete(self, *keys: str) -> int:
         return sum(1 for key in keys if self._data.pop(key, None) is not None)
+
+    async def incr(self, key: str, *, ttl_seconds: int) -> int:
+        """Counter that starts the clock on first use. Atomic by the event loop."""
+        current = 0 if self._expired(key) else int(self._data.get(key, ("0", None))[0])
+        value = current + 1
+        await self.set(key, str(value), ttl_seconds=ttl_seconds if current == 0 else None)
+        return value
 
     async def scan(self, pattern: str) -> AsyncIterator[str]:
         for key in list(self._data):
@@ -142,6 +151,21 @@ class RedisStore:
             return int(await self._client.delete(*keys))
         except Exception as exc:
             raise MemoryStoreError("redis DEL failed", detail=str(exc)) from exc
+
+    async def incr(self, key: str, *, ttl_seconds: int) -> int:
+        """Atomic counter with an expiry set on first increment.
+
+        One round trip: a GET-then-SET would let two requests read the same value and
+        both write it back, which is precisely the case a rate limit exists to catch.
+        """
+        try:
+            pipe = self._client.pipeline()
+            pipe.incr(key)
+            pipe.expire(key, ttl_seconds, nx=True)
+            result = await pipe.execute()
+        except Exception as exc:
+            raise MemoryStoreError("redis INCR failed", key=key, detail=str(exc)) from exc
+        return int(result[0])
 
     async def scan(self, pattern: str) -> AsyncIterator[str]:
         """SCAN, never KEYS: KEYS blocks the server, and forget() can match a lot."""
